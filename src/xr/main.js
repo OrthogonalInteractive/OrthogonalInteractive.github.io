@@ -4,6 +4,7 @@ import { loadCatModel } from './catModel.js'
 import { fingertip, isTouching, screenCircle } from './contact.js'
 import { createHandOverlay, videoRect } from './handOverlay.js'
 import { createPinchScale } from './pinchScale.js'
+import { createScreenPinch } from './screenPinch.js'
 import { HAND_ASSETS, HAND_CACHE, createAssetStore, installAssetWorker } from './handAssets.js'
 import { createStrokeTracker } from './stroke.js'
 import { swirlAngle } from './swirl.js'
@@ -14,6 +15,9 @@ const TARGET_SRC = '/xr/targets.mind'
 
 // How much of the swept angle the object takes on.
 const SPIN_GAIN = 1
+
+// The largest the model can be made, by either kind of pinch.
+const MAX_SCALE = 2.5
 
 // Hand detection every other frame keeps the interaction responsive without
 // paying for it on every render.
@@ -57,7 +61,7 @@ async function launch() {
   const { renderer, scene, camera } = mindarThree
   const overlay = createHandOverlay(document.querySelector('#overlay'))
   const stroke = createStrokeTracker()
-  const pinch = createPinchScale()
+  const pinch = createPinchScale({ maxScale: MAX_SCALE })
   let handTracker = null
   let handOn = false
   let frame = 0
@@ -111,6 +115,7 @@ async function launch() {
     touching = false
     pinched = false
     overlay.clear()
+    screenPinch.reset()
     cat.setSize(1)
     cat.setHighlight(0)
     handButton.textContent = 'Enable hand control'
@@ -120,6 +125,9 @@ async function launch() {
 
   function handControlOn() {
     handOn = true
+    pointers.clear()
+    screenPinching = false
+    stopSwipe()
     handButton.textContent = 'Turn hand control off'
     hintText.textContent = 'Stroke it to turn'
     handNote.textContent = 'Hand control on'
@@ -239,20 +247,47 @@ async function launch() {
     cat.spin(swept * facing * SPIN_GAIN)
   }
 
-  // Until hand control is switched on, the same turntable answers to a swipe.
+  // Until hand control is switched on, the same turntable answers to a swipe,
+  // and two fingers resize the model the way a touchscreen usually does.
   const swipe = createStrokeTracker()
+  const screenPinch = createScreenPinch({ max: MAX_SCALE })
+  const pointers = new Map()
   let swiping = false
+  let screenPinching = false
+
+  const pair = () => [...pointers.values()]
   let handReadout = []
+
+  const stopSwipe = () => {
+    swiping = false
+    swipe.update({ point: null, touching: false })
+  }
 
   document.addEventListener('pointerdown', (event) => {
     if (handOn || event.target.closest('button, a')) return
     const point = { x: event.clientX, y: event.clientY }
-    if (!isTouching(point, circle)) return
+    pointers.set(event.pointerId, point)
+
+    if (pointers.size === 2) {
+      // A second finger turns the gesture into a resize, not a turn.
+      stopSwipe()
+      screenPinching = true
+      screenPinch.begin(...pair())
+      return
+    }
+    if (pointers.size > 2 || !isTouching(point, circle)) return
     swiping = true
     swipe.update({ point, touching: true })
   })
 
   document.addEventListener('pointermove', (event) => {
+    if (!pointers.has(event.pointerId)) return
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+
+    if (screenPinching && pointers.size >= 2) {
+      cat.setSize(screenPinch.update(...pair()))
+      return
+    }
     if (!swiping) return
     const { from, to } = swipe.update({
       point: { x: event.clientX, y: event.clientY },
@@ -261,12 +296,16 @@ async function launch() {
     spinBy(swirlAngle(from, to, circle))
   })
 
-  const endSwipe = () => {
-    swiping = false
-    swipe.update({ point: null, touching: false })
+  const liftPointer = (event) => {
+    pointers.delete(event.pointerId)
+    if (pointers.size < 2 && screenPinching) {
+      screenPinching = false
+      screenPinch.end()
+    }
+    if (pointers.size === 0) stopSwipe()
   }
-  document.addEventListener('pointerup', endSwipe)
-  document.addEventListener('pointercancel', endSwipe)
+  document.addEventListener('pointerup', liftPointer)
+  document.addEventListener('pointercancel', liftPointer)
 
   renderer.setAnimationLoop(() => {
     const delta = clock.getDelta()
@@ -329,13 +368,14 @@ async function launch() {
       ]
     }
 
-    cat.setHighlight(touching || swiping ? 1 : 0)
+    cat.setHighlight(touching || swiping || screenPinching ? 1 : 0)
     cat.update(delta)
 
     if (debugging) {
       debugPanel.textContent = [
         ...handReadout,
-        `swipe   ${swiping ? 'YES' : 'no'}`,
+        `swipe   ${swiping ? 'YES' : screenPinching ? 'PINCH' : 'no'}`,
+        `screen  ${screenPinch.scale.toFixed(2)}x`,
         `touch   ${touching ? 'YES' : 'no'}`,
         `turn    ${cat.turn}deg`,
         `object  ${circle ? `${circle.x.toFixed(0)},${circle.y.toFixed(0)} r${circle.r.toFixed(0)}` : '-'}`,
