@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <link rel="icon" type="image/png" href="/org-icon.png" />
+    <title>Orthogonal Interactive — AR</title>
+    <meta name="description" content="Point your camera at the Orthogonal Interactive mark." />
+    <meta name="theme-color" content="#0b1211" />
+    <meta name="robots" content="noindex" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="scene" class="stage"></div>
+
+    <div id="intro" class="panel">
+      <img class="panel__mark" src="/org-icon.png" alt="" width="88" height="88" />
+      <h1 class="panel__title">Point at the mark</h1>
+      <p class="panel__body">
+        Allow camera access, then hold the printed Orthogonal Interactive mark in
+        view. A 3D object appears on top of it.
+      </p>
+      <button id="start" class="panel__button" type="button">Start camera</button>
+      <p id="note" class="panel__note"></p>
+    </div>
+
+    <p id="hint" class="hint" hidden>
+      <span class="hint__dot"></span><span id="hint-text">Looking for the mark</span>
+    </p>
+
+    <a class="back" href="/">← orthogonalinteractive.github.io</a>
+
+    <script type="module" src="/src/xr/main.js"></script>
+  </body>
+</html>

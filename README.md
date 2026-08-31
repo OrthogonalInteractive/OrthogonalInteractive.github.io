@@ -9,6 +9,23 @@ Vue 3 + Vite の1ページ構成のポートフォリオサイト。配色は組
 メールアドレスも About の定義リストに含めている（GitHub はヘッダのみ）。
 実績セクションは現時点では設けていない。
 
+## AR ページ（`/xr/`）
+
+名刺に印刷したロゴをカメラで認識し、その上に 3D オブジェクトを重ねる。
+WebXR は使っていない（iOS Safari が WebXR を実装しておらず、Chrome の画像
+トラッキングも incubation フラグ配下のため）。代わりに MindAR
+（getUserMedia + WASM）を使うので iOS Safari / Android Chrome の双方で動く。
+
+認識対象は `public/org-icon.png` そのもの。アートワークを変えたら必ず
+ターゲットを作り直す:
+
+```bash
+npm run compile:target   # public/xr/targets.mind を再生成
+```
+
+`three` は **0.160.1 に固定**している。mind-ar 1.2.5 が three から
+`sRGBEncoding` を import しており、0.166 以降では削除されているため。
+
 ## 開発
 
 ```bash
@@ -23,6 +40,11 @@ npm run preview  # ビルド結果を確認
 
 ```
 index.html                     メタタグ／フォント読み込み
+xr/index.html                  AR ページ（Vite の第2エントリ → /xr/）
+src/xr/main.js                 MindAR の起動と描画ループ
+src/xr/brandObject.js          マーカー上に出す 3D オブジェクト
+src/xr/support.js              カメラ／WebGL の事前判定
+tools/compile-target.mjs       ロゴ → .mind ターゲットのコンパイル
 src/App.vue                    セクションの組み立てと背景
 src/style.css                  カラートークンと共通プリミティブ
 src/components/SiteHeader.vue      屋号ロゴとナビゲーション

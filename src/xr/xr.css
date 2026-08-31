@@ -1,0 +1,139 @@
+@import '../style.css';
+
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.stage {
+  position: fixed;
+  inset: 0;
+  background: var(--ink-900);
+}
+
+/* MindAR injects the camera feed and canvas as absolutely positioned children. */
+.stage video,
+.stage canvas {
+  object-fit: cover;
+}
+
+.panel {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 1.1rem;
+  padding: 2rem max(1.5rem, env(safe-area-inset-right)) 2rem
+    max(1.5rem, env(safe-area-inset-left));
+  background: var(--ink-800);
+  transition: opacity 0.5s var(--ease);
+}
+
+.panel.is-gone {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.panel__mark {
+  border-radius: 14px;
+  border: 1px solid var(--line);
+}
+
+.panel__title {
+  font-size: clamp(1.7rem, 6vw, 2.4rem);
+  font-weight: 300;
+  letter-spacing: -0.03em;
+}
+
+.panel__body {
+  max-width: 30rem;
+  color: var(--fg-muted);
+  font-weight: 300;
+}
+
+.panel__button {
+  margin-top: 0.6rem;
+  padding: 0.85rem 1.6rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--cyan);
+  color: var(--ink-900);
+  font-family: inherit;
+  font-size: 0.92rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 0.25s var(--ease), box-shadow 0.25s var(--ease);
+}
+
+.panel__button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 34px -12px var(--cyan);
+}
+
+.panel__button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.panel__note {
+  min-height: 1.2em;
+  max-width: 30rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.7;
+  letter-spacing: 0.04em;
+  color: var(--steel);
+}
+
+.panel__note.is-error {
+  color: #e2917f;
+}
+
+.hint {
+  position: fixed;
+  z-index: 10;
+  left: max(1.5rem, env(safe-area-inset-left));
+  bottom: max(1.5rem, env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.55rem 0.95rem;
+  border-radius: 999px;
+  background: rgba(11, 18, 17, 0.7);
+  backdrop-filter: blur(8px);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+.hint__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--steel);
+  transition: background 0.3s var(--ease), box-shadow 0.3s var(--ease);
+}
+
+.hint.is-found .hint__dot {
+  background: var(--cyan);
+  box-shadow: 0 0 12px var(--cyan);
+}
+
+.back {
+  position: fixed;
+  z-index: 10;
+  right: max(1.5rem, env(safe-area-inset-right));
+  bottom: max(1.5rem, env(safe-area-inset-bottom));
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  color: var(--fg-faint);
+}
+
+.back:hover {
+  color: var(--cyan);
+}
