@@ -1,25 +1,24 @@
 import * as THREE from 'three'
 import { MindARThree } from 'mind-ar/dist/mindar-image-three.prod.js'
 import { createBrandObject } from './brandObject.js'
-import { isTouching, pinchPoint, screenCircle } from './contact.js'
-import { createGrabSession } from './grabSession.js'
+import { fingertip, isTouching, screenCircle } from './contact.js'
 import { createHandOverlay, videoRect } from './handOverlay.js'
 import { HAND_ASSETS, HAND_CACHE, createAssetStore, installAssetWorker } from './handAssets.js'
-import { createPinchTracker } from './pinch.js'
+import { createStrokeTracker } from './stroke.js'
 import { unsupportedReason } from './support.js'
 import './xr.css'
 
 const TARGET_SRC = '/xr/targets.mind'
 
-// A modest wrist turn should read as a definite spin.
-const TWIST_GAIN = 2
+// Radians of rotation per pixel of stroke.
+const STROKE_GAIN = 0.007
 
 // Hand detection every other frame keeps the interaction responsive without
 // paying for it on every render.
 const DETECT_EVERY = 2
 
 // Roughly the outer ring, in mark widths — what counts as touching the object.
-const CONTACT_RADIUS = 0.3
+const CONTACT_RADIUS = 0.6
 
 const debugPanel = document.querySelector('#debug')
 const debugging = new URLSearchParams(location.search).has('debug')
@@ -55,10 +54,10 @@ async function launch() {
 
   const { renderer, scene, camera } = mindarThree
   const overlay = createHandOverlay(document.querySelector('#overlay'))
-  const pinch = createPinchTracker()
+  const stroke = createStrokeTracker()
   let handTracker = null
   let frame = 0
-  let grab = null
+  let touching = false
 
   scene.add(new THREE.AmbientLight(0xbcd6de, 1.1))
   const keyLight = new THREE.DirectionalLight(0xdff0f6, 2.2)
@@ -88,13 +87,6 @@ async function launch() {
     hint.classList.remove('is-found')
     hintText.textContent = 'Looking for the mark'
   }
-
-  grab = createGrabSession({
-    object: brand,
-    twistGain: TWIST_GAIN,
-    onLatch: () => mindarThree.controller.stopProcessVideo(),
-    onResume: () => mindarThree.controller.processVideo(mindarThree.video),
-  })
 
   /** Reflects whether the 19 MB is already on the device. */
   async function showCacheState() {
@@ -136,7 +128,7 @@ async function launch() {
       const cached = await assets.isCached()
       handButton.hidden = true
       handClear.hidden = !cached
-      hintText.textContent = 'Pinch to grab'
+      hintText.textContent = 'Stroke it to turn'
       handNote.textContent = 'Hand control on'
     } catch (error) {
       handButton.disabled = false
@@ -177,6 +169,9 @@ async function launch() {
 
   if (debugging) debugPanel.hidden = false
   const markerScale = new THREE.Vector3()
+  const cameraUp = new THREE.Vector3()
+  const cameraRight = new THREE.Vector3()
+  const spinAxis = new THREE.Vector3()
   const clock = new THREE.Clock()
 
   renderer.setAnimationLoop(() => {
@@ -184,7 +179,10 @@ async function launch() {
 
     // Follow the mark only while the tracker owns it. Once frozen — or once the
     // mark is out of sight — the object simply stays where it was last seen.
-    if (!grab.latched && anchor.group.visible) {
+    // The tracker keeps running alongside the hand; the pose is only held
+    // still while a finger is on the object, where a partly covered mark would
+    // otherwise make it jitter.
+    if (!touching && anchor.group.visible) {
       holder.matrix.copy(anchor.group.matrix)
       holder.matrixWorldNeedsUpdate = true
       holder.visible = true
@@ -193,35 +191,36 @@ async function launch() {
 
     if (handTracker && frame++ % DETECT_EVERY === 0) {
       const landmarks = handTracker.detect(mindarThree.video, performance.now())
-      const gesture = pinch.update(landmarks)
-
       // Contact is judged on screen: the landmarks carry no depth that could
-      // place the fingers in front of or behind the object.
+      // place the finger in front of or behind the object.
       const rect = videoRect(mindarThree.video)
       const size = { width: window.innerWidth, height: window.innerHeight }
       markerScale.setFromMatrixColumn(holder.matrixWorld, 0)
       const circle = holder.visible
         ? screenCircle(brand.group, camera, CONTACT_RADIUS * markerScale.length(), size)
         : null
-      const point = landmarks ? pinchPoint(landmarks, rect) : null
-      const touching = isTouching(point, circle)
+      const point = landmarks ? fingertip(landmarks, rect) : null
+      touching = isTouching(point, circle)
 
-      grab.apply({ handPresent: Boolean(landmarks), contact: touching, gesture })
+      const { dx, dy } = stroke.update({ point, touching })
+      if (dx || dy) {
+        // Trackball: a sideways stroke turns the object about the screen's
+        // vertical, an up-and-down one about its horizontal.
+        cameraUp.setFromMatrixColumn(camera.matrixWorld, 1)
+        cameraRight.setFromMatrixColumn(camera.matrixWorld, 0)
+        spinAxis.copy(cameraUp).multiplyScalar(dx).addScaledVector(cameraRight, -dy)
+        brand.spin(spinAxis, Math.hypot(dx, dy) * STROKE_GAIN)
+      }
+
       brand.setHighlight(touching ? 1 : 0)
       overlay.draw(landmarks, rect, { touching })
-
-      if (gesture.justGrabbed && grab.holding) {
-        hint.classList.add('is-found')
-        hintText.textContent = 'Holding'
-      }
-      if (gesture.justReleased) hintText.textContent = 'Pinch to grab'
+      hint.classList.toggle('is-found', touching)
 
       if (debugging) {
         debugPanel.textContent = [
           `hand    ${landmarks ? 'yes' : 'no'}`,
-          `pinch   ${gesture.pinching ? 'YES' : 'no'}`,
           `touch   ${touching ? 'YES' : 'no'}`,
-          `twist   ${((gesture.twist * 180) / Math.PI).toFixed(0)}deg`,
+          `stroke  ${dx.toFixed(0)},${dy.toFixed(0)}`,
           `object  ${circle ? `${circle.x.toFixed(0)},${circle.y.toFixed(0)} r${circle.r.toFixed(0)}` : '-'}`,
           `finger  ${point ? `${point.x.toFixed(0)},${point.y.toFixed(0)}` : '-'}`,
         ].join('\n')

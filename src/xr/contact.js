@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { LANDMARK } from './pinch.js'
+import { LANDMARK } from './landmarks.js'
 
 /** How far outside its own radius the object still counts as touched. */
 const SLACK = 1.15
@@ -17,11 +17,9 @@ export function landmarkToScreen({ x, y }, rect) {
   return { x: rect.left + x * rect.width, y: rect.top + y * rect.height }
 }
 
-/** Where the fingers meet, in screen pixels. */
-export function pinchPoint(landmarks, rect) {
-  const thumb = landmarkToScreen(landmarks[LANDMARK.THUMB_TIP], rect)
-  const index = landmarkToScreen(landmarks[LANDMARK.INDEX_TIP], rect)
-  return { x: (thumb.x + index.x) / 2, y: (thumb.y + index.y) / 2 }
+/** The index fingertip, in screen pixels — the only thing that can touch. */
+export function fingertip(landmarks, rect) {
+  return landmarkToScreen(landmarks[LANDMARK.INDEX_TIP], rect)
 }
 
 /**

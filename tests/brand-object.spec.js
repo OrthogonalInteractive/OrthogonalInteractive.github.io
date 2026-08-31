@@ -27,14 +27,49 @@ describe('createBrandObject', () => {
     )
   })
 
-  it('lies flat on the tracked image, sized to sit within it', () => {
+  it('reads larger than the mark it rises from', () => {
     const { group } = createBrandObject()
     const box = new THREE.Box3().setFromObject(group)
+    const width = box.max.x - box.min.x
 
-    // MindAR anchors span 1 unit across the target's width; leave a margin so
-    // the object sits inside the printed mark rather than overhanging it.
-    expect(box.max.x - box.min.x).toBeLessThanOrEqual(0.62)
-    expect(group.position.z).toBeGreaterThan(0)
+    // A MindAR anchor spans one unit across the target's width. The object is
+    // meant to overhang the card, but not by so much that it leaves frame.
+    expect(width).toBeGreaterThan(1)
+    expect(width).toBeLessThan(1.4)
+  })
+
+  it('floats clear of the mark it sits on', () => {
+    const { group } = createBrandObject()
+
+    expect(group.position.z).toBeGreaterThan(0.3)
+  })
+
+  it('turns about the axis it is stroked along', () => {
+    const object = createBrandObject()
+    const before = object.group.quaternion.clone()
+
+    object.spin(new THREE.Vector3(0, 1, 0), 0.4)
+    object.update(1 / 60)
+
+    expect(object.group.quaternion.angleTo(before)).toBeCloseTo(0.4, 2)
+  })
+
+  it('carries on turning after the finger lifts, then stops', () => {
+    const object = createBrandObject()
+    object.spin(new THREE.Vector3(0, 1, 0), 0.3)
+    object.update(1 / 60)
+    const afterStroke = object.group.quaternion.clone()
+
+    object.update(1 / 60)
+    object.update(1 / 60)
+    const coasting = object.group.quaternion.clone()
+    expect(coasting.angleTo(afterStroke)).toBeGreaterThan(0)
+
+    for (let i = 0; i < 600; i += 1) object.update(1 / 60)
+    const settled = object.group.quaternion.clone()
+    object.update(1 / 60)
+
+    expect(object.group.quaternion.angleTo(settled)).toBeCloseTo(0, 6)
   })
 
   it('sits still until something drives it', () => {
@@ -46,63 +81,9 @@ describe('createBrandObject', () => {
     expect(group.rotation.toArray()).toEqual(before)
   })
 
-  it('rises off the card while held', () => {
-    const object = createBrandObject()
-    const rest = object.group.position.z
 
-    object.setGrabbed(true)
-    for (let i = 0; i < 30; i += 1) object.update(1 / 60)
 
-    expect(object.group.position.z).toBeGreaterThan(rest + 0.1)
-  })
 
-  it('drops back and settles when let go', () => {
-    const object = createBrandObject()
-    const rest = object.group.position.z
-    object.setGrabbed(true)
-    for (let i = 0; i < 30; i += 1) object.update(1 / 60)
-
-    object.setGrabbed(false)
-    let lowest = Infinity
-    for (let i = 0; i < 180; i += 1) {
-      object.update(1 / 60)
-      lowest = Math.min(lowest, object.group.position.z)
-    }
-
-    // It lands on the card and stays there — never sinking through it.
-    expect(lowest).toBeGreaterThanOrEqual(rest - 1e-6)
-    expect(object.group.position.z).toBeCloseTo(rest, 3)
-  })
-
-  it('bounces once instead of stopping dead', () => {
-    const object = createBrandObject()
-    const rest = object.group.position.z
-    object.setGrabbed(true)
-    for (let i = 0; i < 30; i += 1) object.update(1 / 60)
-    object.setGrabbed(false)
-
-    const heights = []
-    for (let i = 0; i < 120; i += 1) {
-      object.update(1 / 60)
-      heights.push(object.group.position.z)
-    }
-    const landed = heights.findIndex((z) => z <= rest + 1e-6)
-    const afterLanding = heights.slice(landed)
-
-    expect(Math.max(...afterLanding)).toBeGreaterThan(rest + 0.005)
-  })
-
-  it('keeps the rotation the twist produced after release', () => {
-    const object = createBrandObject()
-    object.setGrabbed(true)
-    object.setTwist(0.8)
-    object.update(1 / 60)
-
-    object.setGrabbed(false)
-    for (let i = 0; i < 120; i += 1) object.update(1 / 60)
-
-    expect(object.group.rotation.z).toBeCloseTo(0.8, 2)
-  })
 
   it('brightens and swells while a hand is on it', () => {
     const object = createBrandObject()

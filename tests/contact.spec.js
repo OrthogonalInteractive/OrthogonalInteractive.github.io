@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { isTouching, landmarkToScreen, pinchPoint, screenCircle } from '../src/xr/contact.js'
+import { fingertip, isTouching, landmarkToScreen, screenCircle } from '../src/xr/contact.js'
 
 // MindAR scales the camera feed to cover the viewport, so the video box usually
 // hangs outside it. Landmarks are normalised to that box, not to the screen.
@@ -13,13 +13,12 @@ describe('landmarkToScreen', () => {
   })
 })
 
-describe('pinchPoint', () => {
-  it('sits midway between thumb and index tips', () => {
+describe('fingertip', () => {
+  it('reads the index tip alone', () => {
     const landmarks = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }))
-    landmarks[4] = { x: 0.4, y: 0.5 }
-    landmarks[8] = { x: 0.6, y: 0.5 }
+    landmarks[8] = { x: 0.5, y: 0.25 }
 
-    expect(pinchPoint(landmarks, rect)).toEqual({ x: 200, y: 200 })
+    expect(fingertip(landmarks, rect)).toEqual({ x: 200, y: 100 })
   })
 })
 

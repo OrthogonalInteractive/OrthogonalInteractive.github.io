@@ -10,15 +10,15 @@ const PALETTE = {
 
 // A MindAR anchor spans one unit across the width of the tracked image, so
 // everything here is sized as a fraction of the printed mark.
-const CORE_RADIUS = 0.15
-const RING_RADIUS = 0.28
+const CORE_RADIUS = 0.3
+const RING_RADIUS = 0.56
 
-const REST_Z = CORE_RADIUS
-const LIFT_Z = CORE_RADIUS + 0.19
-const LIFT_RATE = 12 // approach speed while held, per second
-const GRAVITY = 4 // fall acceleration once let go, in mark widths per second²
-const RESTITUTION = 0.28 // how much of the impact speed the bounce keeps
-const SETTLE_SPEED = 0.02 // below this the bounce is over
+// Clear of the print, so it reads as hovering above the card rather than
+// printed on it.
+const HOVER_Z = CORE_RADIUS + 0.14
+
+const SPIN_DAMPING = 0.94 // per 1/60 s once the finger lifts
+const SPIN_FLOOR = 0.02 // radians per second below which it has stopped
 
 const HIGHLIGHT_RATE = 9 // how fast the glow follows the hand, per second
 const HIGHLIGHT_SWELL = 0.09 // extra scale at full highlight
@@ -30,13 +30,11 @@ const HIGHLIGHT_EMISSIVE = 0x1b3d47
  */
 export function createBrandObject() {
   const group = new THREE.Group()
-  // Lift it clear of the card so it reads as standing on the print.
-  group.position.z = REST_Z
+  group.position.z = HOVER_Z
 
-  let grabbed = false
-  let velocity = 0
-  let baseRotation = 0
-  let twist = 0
+  const spinAxis = new THREE.Vector3(0, 1, 0)
+  let pendingAngle = 0
+  let spinSpeed = 0
   let highlight = 0
   let highlightTarget = 0
 
@@ -58,7 +56,7 @@ export function createBrandObject() {
   edges.scale.setScalar(1.01)
   group.add(edges)
 
-  const ringGeometry = new THREE.TorusGeometry(RING_RADIUS, 0.003, 3, 96)
+  const ringGeometry = new THREE.TorusGeometry(RING_RADIUS, 0.006, 3, 96)
   const axes = [
     { rotation: [0, 0, 0], color: PALETTE.ring, opacity: 0.75 },
     { rotation: [Math.PI / 2, 0, 0], color: PALETTE.steel, opacity: 0.7 },
@@ -87,22 +85,11 @@ export function createBrandObject() {
       highlightTarget = Math.min(1, Math.max(0, value))
     },
 
-    /** Held or let go. Releasing folds the current twist into the resting pose. */
-    setGrabbed(next) {
-      if (next === grabbed) return
-      grabbed = next
-      if (grabbed) {
-        velocity = 0
-      } else {
-        baseRotation += twist
-        twist = 0
-      }
-    },
-
-    /** Rotation the hand is applying right now, in radians. */
-    setTwist(radians) {
-      twist = radians
-      group.rotation.z = baseRotation + twist
+    /** A stroke: turn by `angle` about a world-space `axis`. */
+    spin(axis, angle) {
+      if (!angle) return
+      spinAxis.copy(axis).normalize()
+      pendingAngle += angle
     },
 
     /** Advances the highlight, the lift and the drop. `delta` is in seconds. */
@@ -116,25 +103,20 @@ export function createBrandObject() {
         ring.material.opacity = rest + (1 - rest) * highlight
       })
 
-      if (grabbed) {
-        group.position.z += (LIFT_Z - group.position.z) * Math.min(1, delta * LIFT_RATE)
+      if (pendingAngle) {
+        group.rotateOnWorldAxis(spinAxis, pendingAngle)
+        // Carry the stroke's speed into the coast that follows it.
+        spinSpeed = pendingAngle / Math.max(delta, 1 / 240)
+        pendingAngle = 0
         return
       }
 
-      if (group.position.z <= REST_Z && Math.abs(velocity) < SETTLE_SPEED) {
-        group.position.z = REST_Z
-        velocity = 0
+      if (Math.abs(spinSpeed) < SPIN_FLOOR) {
+        spinSpeed = 0
         return
       }
-
-      velocity -= GRAVITY * delta
-      group.position.z += velocity * delta
-
-      if (group.position.z <= REST_Z) {
-        group.position.z = REST_Z
-        velocity = Math.abs(velocity) * RESTITUTION
-        if (velocity < SETTLE_SPEED) velocity = 0
-      }
+      spinSpeed *= SPIN_DAMPING ** (delta * 60)
+      group.rotateOnWorldAxis(spinAxis, spinSpeed * delta)
     },
 
     dispose() {

@@ -1,14 +1,7 @@
-/** MediaPipe's hand skeleton, as pairs of landmark indices. */
-export const HAND_BONES = [
-  [0, 1], [1, 2], [2, 3], [3, 4],
-  [0, 5], [5, 6], [6, 7], [7, 8],
-  [9, 10], [10, 11], [11, 12],
-  [13, 14], [14, 15], [15, 16],
-  [0, 17], [17, 18], [18, 19], [19, 20],
-  [5, 9], [9, 13], [13, 17],
-]
+import { INDEX_FINGER, LANDMARK } from './landmarks.js'
 
-const TIPS = new Set([4, 8])
+const IDLE_COLOUR = '#8fd3e8'
+const TOUCH_COLOUR = '#e2574c'
 
 /** The box MindAR scaled the camera feed into, which usually overhangs the screen. */
 export function videoRect(video) {
@@ -47,6 +40,7 @@ export function createHandOverlay(canvas) {
       context.clearRect(0, 0, width, height)
     },
 
+    /** Only the index finger is drawn — it is the only part that can touch. */
     draw(landmarks, rect, { touching = false } = {}) {
       this.clear()
       if (!landmarks) return
@@ -55,27 +49,35 @@ export function createHandOverlay(canvas) {
         x: rect.left + landmarks[i].x * rect.width,
         y: rect.top + landmarks[i].y * rect.height,
       })
-      const accent = touching ? '#c5dfe9' : '#8fd3e8'
+      const colour = touching ? TOUCH_COLOUR : IDLE_COLOUR
 
-      context.lineWidth = touching ? 2.5 : 1.75
-      context.strokeStyle = accent
-      context.globalAlpha = touching ? 0.95 : 0.7
+      context.lineCap = 'round'
+      context.lineJoin = 'round'
+      context.strokeStyle = colour
+      context.lineWidth = touching ? 9 : 7
+      context.globalAlpha = touching ? 0.95 : 0.75
       context.beginPath()
-      for (const [a, b] of HAND_BONES) {
-        const from = point(a)
-        const to = point(b)
-        context.moveTo(from.x, from.y)
-        context.lineTo(to.x, to.y)
-      }
+      INDEX_FINGER.forEach((index, i) => {
+        const p = point(index)
+        if (i === 0) context.moveTo(p.x, p.y)
+        else context.lineTo(p.x, p.y)
+      })
       context.stroke()
 
+      const tip = point(LANDMARK.INDEX_TIP)
       context.globalAlpha = 1
-      context.fillStyle = accent
-      for (let i = 0; i < landmarks.length; i += 1) {
-        const p = point(i)
+      context.fillStyle = colour
+      context.beginPath()
+      context.arc(tip.x, tip.y, touching ? 13 : 10, 0, Math.PI * 2)
+      context.fill()
+
+      if (touching) {
+        context.strokeStyle = colour
+        context.lineWidth = 2
+        context.globalAlpha = 0.5
         context.beginPath()
-        context.arc(p.x, p.y, TIPS.has(i) ? 6 : 3, 0, Math.PI * 2)
-        context.fill()
+        context.arc(tip.x, tip.y, 24, 0, Math.PI * 2)
+        context.stroke()
       }
     },
 
