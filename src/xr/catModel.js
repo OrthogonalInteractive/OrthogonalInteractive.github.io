@@ -69,6 +69,7 @@ export async function loadCatModel() {
     spin: motion.spin,
     setHighlight: motion.setHighlight,
     setPresent: motion.setPresent,
+    setSize: motion.setSize,
 
     /** True once it has faded out of sight entirely. */
     get gone() {

@@ -3,6 +3,7 @@ import { MindARThree } from 'mind-ar/dist/mindar-image-three.prod.js'
 import { loadCatModel } from './catModel.js'
 import { fingertip, isTouching, screenCircle } from './contact.js'
 import { createHandOverlay, videoRect } from './handOverlay.js'
+import { createPinchScale } from './pinchScale.js'
 import { HAND_ASSETS, HAND_CACHE, createAssetStore, installAssetWorker } from './handAssets.js'
 import { createStrokeTracker } from './stroke.js'
 import { swirlAngle } from './swirl.js'
@@ -56,6 +57,7 @@ async function launch() {
   const { renderer, scene, camera } = mindarThree
   const overlay = createHandOverlay(document.querySelector('#overlay'))
   const stroke = createStrokeTracker()
+  const pinch = createPinchScale()
   let handTracker = null
   let frame = 0
   let touching = false
@@ -190,6 +192,7 @@ async function launch() {
   const HIDE_AFTER = 700
   let lostSince = -Infinity
   let handSeen = false
+  let pinched = false
 
   // Where the object sits on screen this frame; both the fingertip and a
   // swiping thumb are measured against it.
@@ -274,17 +277,23 @@ async function launch() {
       handSeen = Boolean(landmarks)
       touching = isTouching(point, circle)
 
+      // Opening the fingers resizes the model; closed fingers are its own size.
+      const { closed, scale } = pinch.update(landmarks)
+      pinched = closed
+      cat.setSize(scale)
+
       // Rotation is confined to the mark's normal, so only how far the finger
       // travelled *around* the object counts.
       const { from, to } = stroke.update({ point, touching })
       const swept = swirlAngle(from, to, circle)
       spinBy(swept)
 
-      overlay.draw(landmarks, rect, { touching })
+      overlay.draw(landmarks, rect, { touching, pinched })
       hint.classList.toggle('is-found', touching)
       handReadout = [
         `hand    ${landmarks ? 'yes' : 'no'}`,
-        `finger  ${point ? `${point.x.toFixed(0)},${point.y.toFixed(0)}` : '-'}`,
+        `pinch   ${closed ? 'CLOSED' : 'open'}`,
+        `size    ${scale.toFixed(2)}x`,
       ]
     }
 

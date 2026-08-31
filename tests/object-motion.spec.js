@@ -130,6 +130,26 @@ describe('createMotion', () => {
     expect(group.visible).toBe(true)
   })
 
+  it('eases to the size it is given', () => {
+    const { group, motion } = setup()
+
+    motion.setSize(2.5)
+    for (let i = 0; i < 60; i += 1) motion.update(1 / 60)
+
+    expect(group.scale.x).toBeCloseTo(2.5, 2)
+  })
+
+  it('comes back to its own size on reset', () => {
+    const { group, motion } = setup()
+    motion.setSize(2.5)
+    for (let i = 0; i < 60; i += 1) motion.update(1 / 60)
+
+    motion.reset()
+    motion.update(1 / 60)
+
+    expect(group.scale.x).toBeCloseTo(1, 5)
+  })
+
   it('reports how lit it is, for materials to follow', () => {
     const { motion } = setup()
 

@@ -1,7 +1,8 @@
-import { INDEX_FINGER, LANDMARK } from './landmarks.js'
+import { INDEX_FINGER, LANDMARK, THUMB } from './landmarks.js'
 
 const IDLE_COLOUR = '#8fd3e8'
 const TOUCH_COLOUR = '#e2574c'
+const PINCH_COLOUR = '#e8c34a'
 
 /** The box MindAR scaled the camera feed into, which usually overhangs the screen. */
 export function videoRect(video) {
@@ -40,8 +41,12 @@ export function createHandOverlay(canvas) {
       context.clearRect(0, 0, width, height)
     },
 
-    /** Only the index finger is drawn — it is the only part that can touch. */
-    draw(landmarks, rect, { touching = false } = {}) {
+    /**
+     * The index finger and thumb — the index reaches the model, the pair of
+     * them resize it. Both turn yellow while pinched; otherwise the index goes
+     * red when it is on the object.
+     */
+    draw(landmarks, rect, { touching = false, pinched = false } = {}) {
       this.clear()
       if (!landmarks) return
 
@@ -49,36 +54,42 @@ export function createHandOverlay(canvas) {
         x: rect.left + landmarks[i].x * rect.width,
         y: rect.top + landmarks[i].y * rect.height,
       })
-      const colour = touching ? TOUCH_COLOUR : IDLE_COLOUR
 
+      const bold = touching || pinched
       context.lineCap = 'round'
       context.lineJoin = 'round'
-      context.strokeStyle = colour
-      context.lineWidth = touching ? 9 : 7
-      context.globalAlpha = touching ? 0.95 : 0.75
-      context.beginPath()
-      INDEX_FINGER.forEach((index, i) => {
-        const p = point(index)
-        if (i === 0) context.moveTo(p.x, p.y)
-        else context.lineTo(p.x, p.y)
-      })
-      context.stroke()
+      context.lineWidth = bold ? 9 : 7
 
-      const tip = point(LANDMARK.INDEX_TIP)
-      context.globalAlpha = 1
-      context.fillStyle = colour
-      context.beginPath()
-      context.arc(tip.x, tip.y, touching ? 13 : 10, 0, Math.PI * 2)
-      context.fill()
-
-      if (touching) {
+      const finger = (chain, colour, tipIndex, ringed) => {
         context.strokeStyle = colour
+        context.fillStyle = colour
+        context.globalAlpha = bold ? 0.95 : 0.75
+        context.beginPath()
+        chain.forEach((index, i) => {
+          const p = point(index)
+          if (i === 0) context.moveTo(p.x, p.y)
+          else context.lineTo(p.x, p.y)
+        })
+        context.stroke()
+
+        const tip = point(tipIndex)
+        context.globalAlpha = 1
+        context.beginPath()
+        context.arc(tip.x, tip.y, bold ? 13 : 10, 0, Math.PI * 2)
+        context.fill()
+
+        if (!ringed) return
         context.lineWidth = 2
         context.globalAlpha = 0.5
         context.beginPath()
         context.arc(tip.x, tip.y, 24, 0, Math.PI * 2)
         context.stroke()
+        context.lineWidth = bold ? 9 : 7
       }
+
+      const indexColour = pinched ? PINCH_COLOUR : touching ? TOUCH_COLOUR : IDLE_COLOUR
+      finger(THUMB, pinched ? PINCH_COLOUR : IDLE_COLOUR, LANDMARK.THUMB_TIP, false)
+      finger(INDEX_FINGER, indexColour, LANDMARK.INDEX_TIP, touching && !pinched)
     },
 
     dispose() {

@@ -2,6 +2,7 @@ const SPIN_DAMPING = 0.94 // per 1/60 s once the finger lifts
 const SPIN_FLOOR = 0.02 // radians per second below which it has stopped
 const HIGHLIGHT_RATE = 9 // how fast the glow follows the hand, per second
 const FADE_RATE = 10 // how fast it fades once the mark is out of sight
+const SIZE_RATE = 14 // how closely the size follows the fingers, per second
 const HIGHLIGHT_SWELL = 0.07 // extra scale at full highlight
 
 /**
@@ -19,6 +20,8 @@ export function createMotion(group, { baseScale = 1 } = {}) {
   let target = 0
   let presence = 1
   let present = true
+  let size = 1
+  let sizeTarget = 1
 
   return {
     get highlight() {
@@ -46,11 +49,18 @@ export function createMotion(group, { baseScale = 1 } = {}) {
       target = Math.min(1, Math.max(0, value))
     },
 
+    /** Size relative to the model's own, as the fingers set it. */
+    setSize(factor) {
+      sizeTarget = factor
+    },
+
     /** Back to the pose it was built with, standing still. */
     reset() {
       group.quaternion.identity()
       pendingAngle = 0
       spinSpeed = 0
+      size = 1
+      sizeTarget = 1
     },
 
     update(delta) {
@@ -59,7 +69,8 @@ export function createMotion(group, { baseScale = 1 } = {}) {
       group.visible = presence > 0.005
 
       highlight += (target - highlight) * Math.min(1, delta * HIGHLIGHT_RATE)
-      group.scale.setScalar(baseScale * (1 + highlight * HIGHLIGHT_SWELL))
+      size += (sizeTarget - size) * Math.min(1, delta * SIZE_RATE)
+      group.scale.setScalar(baseScale * size * (1 + highlight * HIGHLIGHT_SWELL))
 
       if (pendingAngle) {
         group.rotateZ(pendingAngle)
