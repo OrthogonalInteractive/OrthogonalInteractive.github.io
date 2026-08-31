@@ -15,6 +15,8 @@ body {
   position: fixed;
   inset: 0;
   background: var(--ink-900);
+  /* A swipe turns the model; the browser must not scroll or zoom instead. */
+  touch-action: none;
 }
 
 /* MindAR injects the camera feed and canvas as absolutely positioned children. */

@@ -58,6 +58,29 @@ describe('createMotion', () => {
     expect(group.scale.x).toBeCloseTo(rest, 3)
   })
 
+  it('returns to its starting pose when reset', () => {
+    const { group, motion } = setup()
+    motion.spin(new THREE.Vector3(0, 1, 0), 1.2)
+    motion.update(1 / 60)
+
+    motion.reset()
+
+    expect(group.quaternion.angleTo(new THREE.Quaternion())).toBeCloseTo(0, 6)
+  })
+
+  it('stops coasting when reset', () => {
+    const { group, motion } = setup()
+    motion.spin(new THREE.Vector3(0, 1, 0), 1.2)
+    motion.update(1 / 60)
+
+    motion.reset()
+    motion.update(1 / 60)
+    const settled = group.quaternion.clone()
+    motion.update(1 / 60)
+
+    expect(group.quaternion.angleTo(settled)).toBe(0)
+  })
+
   it('reports how lit it is, for materials to follow', () => {
     const { motion } = setup()
 

@@ -80,15 +80,6 @@ async function launch() {
   holder.add(cat.group)
   scene.add(holder)
 
-  anchor.onTargetFound = () => {
-    hint.classList.add('is-found')
-    hintText.textContent = 'Mark found'
-  }
-  anchor.onTargetLost = () => {
-    hint.classList.remove('is-found')
-    hintText.textContent = 'Looking for the mark'
-  }
-
   /** Reflects whether the 19 MB is already on the device. */
   async function showCacheState() {
     if (!assets.available) {
@@ -162,11 +153,6 @@ async function launch() {
       hintText.textContent = 'Try more light, or hold it face-on'
     }
   }, 20000)
-  anchor.onTargetFound = () => {
-    clearTimeout(nudge)
-    hint.classList.add('is-found')
-    hintText.textContent = 'Mark found'
-  }
 
   if (debugging) {
     debugPanel.hidden = false
@@ -198,6 +184,49 @@ async function launch() {
   renderer.localClippingEnabled = true
   cat.applyClipping(clipPlane)
 
+  // Where the object sits on screen this frame; both the fingertip and a
+  // swiping thumb are measured against it.
+  let circle = null
+
+  /** Turns a swept angle into rotation about the mark's normal. */
+  function spinBy(swept) {
+    if (!swept) return
+    // Screen y points down, so a sweep that reads clockwise turns the object
+    // negatively about a normal facing the lens.
+    toCamera.subVectors(camera.position, objectPosition)
+    const facing = markerNormal.dot(toCamera) > 0 ? -1 : 1
+    cat.spin(markerNormal, swept * facing * SPIN_GAIN)
+  }
+
+  // Until hand control is switched on, the same turntable answers to a swipe.
+  const swipe = createStrokeTracker()
+  let swiping = false
+  let handReadout = []
+
+  document.addEventListener('pointerdown', (event) => {
+    if (handTracker || event.target.closest('button, a')) return
+    const point = { x: event.clientX, y: event.clientY }
+    if (!isTouching(point, circle)) return
+    swiping = true
+    swipe.update({ point, touching: true })
+  })
+
+  document.addEventListener('pointermove', (event) => {
+    if (!swiping) return
+    const { from, to } = swipe.update({
+      point: { x: event.clientX, y: event.clientY },
+      touching: true,
+    })
+    spinBy(swirlAngle(from, to, circle))
+  })
+
+  const endSwipe = () => {
+    swiping = false
+    swipe.update({ point: null, touching: false })
+  }
+  document.addEventListener('pointerup', endSwipe)
+  document.addEventListener('pointercancel', endSwipe)
+
   renderer.setAnimationLoop(() => {
     const delta = clock.getDelta()
 
@@ -216,16 +245,17 @@ async function launch() {
     objectPosition.setFromMatrixPosition(holder.matrixWorld)
     clipPlane.setFromNormalAndCoplanarPoint(markerNormal, objectPosition)
 
+    const size = { width: window.innerWidth, height: window.innerHeight }
+    markerScale.setFromMatrixColumn(holder.matrixWorld, 0)
+    circle = holder.visible
+      ? screenCircle(cat.group, camera, cat.radius * markerScale.length(), size)
+      : null
+
     if (handTracker && frame++ % DETECT_EVERY === 0) {
       const landmarks = handTracker.detect(mindarThree.video, performance.now())
       // Contact is judged on screen: the landmarks carry no depth that could
       // place the finger in front of or behind the object.
       const rect = videoRect(mindarThree.video)
-      const size = { width: window.innerWidth, height: window.innerHeight }
-      markerScale.setFromMatrixColumn(holder.matrixWorld, 0)
-      const circle = holder.visible
-        ? screenCircle(cat.group, camera, cat.radius * markerScale.length(), size)
-        : null
       const point = landmarks ? fingertip(landmarks, rect) : null
       touching = isTouching(point, circle)
 
@@ -233,42 +263,51 @@ async function launch() {
       // travelled *around* the object counts.
       const { from, to } = stroke.update({ point, touching })
       const swept = swirlAngle(from, to, circle)
-      if (swept) {
-        // Screen y points down, so a sweep that reads clockwise turns the
-        // object negatively about a normal facing the lens.
-        toCamera.subVectors(camera.position, objectPosition)
-        const facing = markerNormal.dot(toCamera) > 0 ? -1 : 1
-        cat.spin(markerNormal, swept * facing * SPIN_GAIN)
-      }
+      spinBy(swept)
 
-      cat.setHighlight(touching ? 1 : 0)
       overlay.draw(landmarks, rect, { touching })
       hint.classList.toggle('is-found', touching)
-
-      if (debugging) {
-        debugPanel.textContent = [
-          `hand    ${landmarks ? 'yes' : 'no'}`,
-          `touch   ${touching ? 'YES' : 'no'}`,
-          `swirl   ${((swept * 180) / Math.PI).toFixed(0)}deg`,
-          `object  ${circle ? `${circle.x.toFixed(0)},${circle.y.toFixed(0)} r${circle.r.toFixed(0)}` : '-'}`,
-          `finger  ${point ? `${point.x.toFixed(0)},${point.y.toFixed(0)}` : '-'}`,
-        ].join('\n')
-      }
+      handReadout = [
+        `hand    ${landmarks ? 'yes' : 'no'}`,
+        `finger  ${point ? `${point.x.toFixed(0)},${point.y.toFixed(0)}` : '-'}`,
+      ]
     }
 
+    cat.setHighlight(touching || swiping ? 1 : 0)
     cat.update(delta)
+
+    if (debugging) {
+      debugPanel.textContent = [
+        ...handReadout,
+        `swipe   ${swiping ? 'YES' : 'no'}`,
+        `touch   ${touching ? 'YES' : 'no'}`,
+        `turn    ${cat.turn}deg`,
+        `object  ${circle ? `${circle.x.toFixed(0)},${circle.y.toFixed(0)} r${circle.r.toFixed(0)}` : '-'}`,
+      ].join('\n')
+    }
     renderer.render(scene, camera)
   })
 
-  // Offer hand control only once the mark has actually been registered.
-  let revealed = false
-  const originalFound = anchor.onTargetFound
+  // Tracking flickers, and replaying the rise on every stutter would strobe.
+  const REARM_AFTER = 500
+  let lostSince = -Infinity
+
+  anchor.onTargetLost = () => {
+    lostSince = performance.now()
+    hint.classList.remove('is-found')
+    hintText.textContent = 'Looking for the mark'
+  }
+
   anchor.onTargetFound = () => {
-    originalFound()
-    if (!revealed) {
-      revealed = true
-      cat.reveal()
-    }
+    clearTimeout(nudge)
+    hint.classList.add('is-found')
+    hintText.textContent = 'Mark found'
+
+    // A first sighting, or a real loss rather than a stutter: rise again from
+    // inside the card, back at the heading it started from.
+    if (performance.now() - lostSince > REARM_AFTER) cat.reveal()
+
+    // Offer hand control only once the mark has actually been registered.
     if (hand.hidden) {
       hand.hidden = false
       showCacheState()

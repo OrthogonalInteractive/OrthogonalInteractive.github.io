@@ -35,6 +35,13 @@ export function createMotion(group, { baseScale = 1 } = {}) {
       target = Math.min(1, Math.max(0, value))
     },
 
+    /** Back to the pose it was built with, standing still. */
+    reset() {
+      group.quaternion.identity()
+      pendingAngle = 0
+      spinSpeed = 0
+    },
+
     update(delta) {
       highlight += (target - highlight) * Math.min(1, delta * HIGHLIGHT_RATE)
       group.scale.setScalar(baseScale * (1 + highlight * HIGHLIGHT_SWELL))

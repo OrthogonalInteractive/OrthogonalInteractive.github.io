@@ -69,8 +69,9 @@ export async function loadCatModel() {
     spin: motion.spin,
     setHighlight: motion.setHighlight,
 
-    /** Play the climb out of the card. */
+    /** Play the climb out of the card, from the pose it was built with. */
     reveal() {
+      motion.reset()
       rise.start()
     },
 
@@ -80,6 +81,11 @@ export async function loadCatModel() {
         material.clippingPlanes = [plane]
         material.needsUpdate = true
       })
+    },
+
+    /** How far the object has been turned from its starting pose, in degrees. */
+    get turn() {
+      return Math.round((2 * Math.acos(Math.min(1, Math.abs(group.quaternion.w))) * 180) / Math.PI)
     },
 
     /** Heading on the card in degrees — the debug control drives this. */

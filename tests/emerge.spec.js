@@ -41,6 +41,17 @@ describe('createEmergence', () => {
     expect(halfway).toBeGreaterThan(-0.5 + 0.9 * 0.5)
   })
 
+  it('drops back and climbs again when restarted mid-rise', () => {
+    const rise = make()
+    rise.start()
+    rise.update(0.4)
+
+    rise.start()
+
+    expect(rise.update(0)).toBe(-0.5)
+    expect(rise.done).toBe(false)
+  })
+
   it('holds at the top however long it runs', () => {
     const rise = make()
     rise.start()
