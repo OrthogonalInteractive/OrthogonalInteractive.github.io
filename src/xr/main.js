@@ -61,7 +61,15 @@ async function launch() {
 
   const brand = createBrandObject()
   const anchor = mindarThree.addAnchor(0)
-  anchor.group.add(brand.group)
+
+  // The object rides its own group rather than the anchor's. MindAR wipes a
+  // lost anchor's matrix to zeroes, so anything parented to it vanishes the
+  // instant a hand covers the mark — which is exactly when it must not.
+  const holder = new THREE.Group()
+  holder.matrixAutoUpdate = false
+  holder.visible = false
+  holder.add(brand.group)
+  scene.add(holder)
 
   anchor.onTargetFound = () => {
     hint.classList.add('is-found')
@@ -75,15 +83,8 @@ async function launch() {
   grab = createGrabSession({
     object: brand,
     twistGain: TWIST_GAIN,
-    onLatch: () => {
-      mindarThree.controller.stopProcessVideo()
-      hint.classList.add('is-found')
-      hintText.textContent = 'Holding'
-    },
-    onResume: () => {
-      mindarThree.controller.processVideo(mindarThree.video)
-      hintText.textContent = 'Pinch to grab'
-    },
+    onLatch: () => mindarThree.controller.stopProcessVideo(),
+    onResume: () => mindarThree.controller.processVideo(mindarThree.video),
   })
 
   /** Reflects whether the 19 MB is already on the device. */
@@ -171,7 +172,22 @@ async function launch() {
 
     if (handTracker && frame++ % DETECT_EVERY === 0) {
       const landmarks = handTracker.detect(mindarThree.video, performance.now())
-      grab.apply(pinch.update(landmarks))
+      const gesture = pinch.update(landmarks)
+      grab.apply({ handPresent: Boolean(landmarks), gesture })
+
+      if (gesture.justGrabbed) {
+        hint.classList.add('is-found')
+        hintText.textContent = 'Holding'
+      }
+      if (gesture.justReleased) hintText.textContent = 'Pinch to grab'
+    }
+
+    // Follow the mark only while the tracker owns it. Once frozen — or once the
+    // mark is out of sight — the object simply stays where it was last seen.
+    if (!grab.latched && anchor.group.visible) {
+      holder.matrix.copy(anchor.group.matrix)
+      holder.matrixWorldNeedsUpdate = true
+      holder.visible = true
     }
 
     brand.update(delta)
