@@ -92,9 +92,11 @@ describe('portfolio page', () => {
     expect(wrapper.find('nav').find(`a[href="${GITHUB}"]`).exists()).toBe(true)
   })
 
-  it('leaves the footer without links of its own', () => {
+  it('has no footer, carrying the trade name in the masthead instead', () => {
     const wrapper = mount(App)
-    expect(wrapper.find('footer').findAll('a')).toHaveLength(0)
+
+    expect(wrapper.find('footer').exists()).toBe(false)
+    expect(wrapper.find('header .brand').text()).toBe('Orthogonal Interactive')
   })
 
   it('opens external links safely', () => {

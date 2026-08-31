@@ -24,12 +24,9 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
 <template>
   <header class="masthead" :class="{ 'is-lifted': lifted }">
     <div class="masthead__inner shell">
-      <a class="brand" href="#top">
-        <img class="brand__mark" src="/org-icon.png" alt="" width="40" height="40" />
-        <span class="brand__text">
-          <span class="brand__name">Orthogonal</span>
-          <span class="brand__sub">Interactive</span>
-        </span>
+      <a class="brand" href="#about">
+        <img class="brand__mark" src="/org-icon.png" alt="" width="30" height="30" />
+        <span class="brand__name">Orthogonal Interactive</span>
       </a>
 
       <nav class="nav" :class="{ 'is-open': open }" aria-label="Primary">
@@ -95,9 +92,9 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
 }
 
 .brand__mark {
-  width: 40px;
-  height: 40px;
-  border-radius: 9px;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
   border: 1px solid var(--line);
   box-shadow: 0 0 0 0 var(--cyan-dim);
   transition: box-shadow 0.4s var(--ease);
@@ -107,24 +104,10 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
   box-shadow: 0 0 22px -2px var(--cyan-dim);
 }
 
-.brand__text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.1;
-}
-
 .brand__name {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 500;
-  letter-spacing: 0.04em;
-}
-
-.brand__sub {
-  font-family: var(--font-mono);
-  font-size: 0.63rem;
-  letter-spacing: 0.28em;
-  text-transform: uppercase;
-  color: var(--steel);
+  letter-spacing: 0.02em;
 }
 
 .nav {

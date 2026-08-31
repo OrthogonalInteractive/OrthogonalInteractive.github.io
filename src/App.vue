@@ -3,7 +3,6 @@ import { ref } from 'vue'
 import SiteHeader from './components/SiteHeader.vue'
 import AboutSection from './components/AboutSection.vue'
 import ServicesSection from './components/ServicesSection.vue'
-import SiteFooter from './components/SiteFooter.vue'
 import { useReveal } from './composables/useReveal'
 
 const root = ref(null)
@@ -23,7 +22,6 @@ useReveal(root)
       <AboutSection />
       <ServicesSection />
     </main>
-    <SiteFooter />
   </div>
 </template>
 

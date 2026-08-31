@@ -25,11 +25,11 @@ npm run preview  # ビルド結果を確認
 index.html                     メタタグ／フォント読み込み
 src/App.vue                    セクションの組み立てと背景
 src/style.css                  カラートークンと共通プリミティブ
+src/components/SiteHeader.vue      屋号ロゴとナビゲーション
 src/App.vue 内 .backdrop        ロゴのウォーターマーク背景
 src/components/AboutSection.vue    経歴と事業者情報（Name / Principal / Founded /
                                    Based in / Email）
 src/components/ServicesSection.vue 提供サービス4種
-src/components/SiteFooter.vue      屋号と著作権表示のみ
 src/composables/useReveal.js   スクロール連動のフェードイン
 public/org-icon.png            ロゴ／favicon
 ```
