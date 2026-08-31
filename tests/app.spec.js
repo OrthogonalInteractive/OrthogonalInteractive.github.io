@@ -79,6 +79,7 @@ describe('portfolio page', () => {
     const services = wrapper.find('#services').text()
 
     expect(services).toContain('Unity')
+    expect(services).toContain('XR/Metaverse')
     expect(services).not.toContain('Three.js')
     expect(services).not.toContain('GLSL')
   })

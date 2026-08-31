@@ -14,8 +14,8 @@ const services = [
   },
   {
     index: '03',
-    title: 'Metaverse & multiplayer',
-    body: 'Shared 3D spaces — avatars, networked state, and the world building that keeps them running with people inside.',
+    title: 'XR/Metaverse',
+    body: 'Shared 3D spaces, on a headset or a flat screen — avatars, networked state, and the world building that keeps them running with people inside.',
     tags: ['Netcode', 'Avatars', 'Worlds'],
   },
   {
