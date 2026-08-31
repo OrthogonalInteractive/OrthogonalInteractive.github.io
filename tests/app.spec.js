@@ -35,6 +35,19 @@ describe('portfolio page', () => {
     expect(wrapper.find('canvas').exists()).toBe(false)
   })
 
+  it('carries no numbered section labels', () => {
+    const wrapper = mount(App)
+
+    expect(wrapper.find('#about').text()).not.toContain('01 —')
+    expect(wrapper.find('#services').text()).not.toContain('02 —')
+    expect(wrapper.findAll('.eyebrow')).toHaveLength(0)
+  })
+
+  it('names XR alongside the metaverse in the About heading', () => {
+    const wrapper = mount(App)
+    expect(wrapper.find('#about h2').text()).toContain('XR/Metaverse')
+  })
+
   it('lists the business facts in the About section', () => {
     const wrapper = mount(App)
     const text = wrapper.find('#about').text()

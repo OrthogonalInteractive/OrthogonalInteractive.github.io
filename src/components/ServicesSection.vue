@@ -31,7 +31,6 @@ const services = [
   <section id="services" class="section">
     <div class="shell">
       <div class="section__head reveal">
-        <p class="eyebrow">02 — Services</p>
         <h2 class="section__title">What I take on</h2>
         <div class="rule" />
         <p class="section__lede">

@@ -14,9 +14,8 @@ const facts = [
     <div class="shell about">
       <div class="about__body">
         <div class="section__head reveal">
-          <p class="eyebrow">01 — About</p>
           <h2 class="section__title">
-            Building interactive 3D and metaverse content.
+            Building interactive 3D and XR/Metaverse content.
           </h2>
         </div>
         <div class="about__copy reveal">
