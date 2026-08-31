@@ -60,15 +60,11 @@ export function createBrandObject() {
     group,
     rings,
 
-    /** Advances the idle animation. `elapsed` is in seconds. */
-    update(elapsed) {
-      group.rotation.z = elapsed * 0.35
-      core.rotation.y = elapsed * 0.5
-      edges.rotation.y = core.rotation.y
-      rings[0].rotation.z = elapsed * 0.6
-      rings[1].rotation.z = -elapsed * 0.45
-      rings[2].rotation.x = elapsed * 0.3
-    },
+    /**
+     * Per-frame hook. The object holds still on its own — rotation comes from
+     * whatever is driving it.
+     */
+    update() {},
 
     dispose() {
       coreGeometry.dispose()

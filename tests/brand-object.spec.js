@@ -37,6 +37,15 @@ describe('createBrandObject', () => {
     expect(group.position.z).toBeGreaterThan(0)
   })
 
+  it('sits still until something drives it', () => {
+    const { group, update } = createBrandObject()
+    const before = group.rotation.toArray()
+
+    update(5)
+
+    expect(group.rotation.toArray()).toEqual(before)
+  })
+
   it('releases every geometry and material on dispose', () => {
     const { group, dispose } = createBrandObject()
     const spies = []
