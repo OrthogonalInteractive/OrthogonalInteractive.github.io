@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { MindARThree } from 'mind-ar/dist/mindar-image-three.prod.js'
 import { createBrandObject } from './brandObject.js'
 import { createGrabSession } from './grabSession.js'
+import { HAND_ASSETS, HAND_CACHE, createAssetStore, installAssetWorker } from './handAssets.js'
 import { createPinchTracker } from './pinch.js'
 import { unsupportedReason } from './support.js'
 import './xr.css'
@@ -23,6 +24,9 @@ const hintText = document.querySelector('#hint-text')
 const hand = document.querySelector('#hand')
 const handButton = document.querySelector('#hand-enable')
 const handNote = document.querySelector('#hand-note')
+const handClear = document.querySelector('#hand-clear')
+
+const assets = createAssetStore({ urls: HAND_ASSETS, cacheName: HAND_CACHE })
 
 function setNote(message, isError = false) {
   note.textContent = message
@@ -82,17 +86,52 @@ async function launch() {
     },
   })
 
+  /** Reflects whether the 19 MB is already on the device. */
+  async function showCacheState() {
+    if (!assets.available) {
+      handNote.textContent = 'Adds a 19 MB download'
+      return
+    }
+    const cached = await assets.isCached()
+    handNote.textContent = cached ? '19 MB cached on this device' : 'Adds a 19 MB download'
+    handClear.hidden = !cached
+  }
+
+  handClear.addEventListener('click', async () => {
+    handClear.disabled = true
+    await assets.clear()
+    handClear.hidden = true
+    handClear.disabled = false
+    handNote.textContent = handTracker
+      ? 'Cache cleared — downloads again next visit'
+      : 'Adds a 19 MB download'
+  })
+
   handButton.addEventListener('click', async () => {
     handButton.disabled = true
-    handNote.textContent = 'Loading hand control…'
+    handClear.hidden = true
     try {
+      await installAssetWorker()
+      handNote.textContent = 'Downloading… 0%'
+      await assets.download((ratio) => {
+        handNote.textContent = `Downloading… ${Math.round(ratio * 100)}%`
+      })
+
+      handNote.textContent = 'Starting hand control…'
       const { loadHandTracker } = await import('./handControl.js')
       handTracker = await loadHandTracker()
-      hand.hidden = true
+
+      // Resolve everything before touching the UI, so the panel never shows a
+      // half-applied state.
+      const cached = await assets.isCached()
+      handButton.hidden = true
+      handClear.hidden = !cached
       hintText.textContent = 'Pinch to grab'
+      handNote.textContent = 'Hand control on'
     } catch (error) {
       handButton.disabled = false
       handNote.textContent = `Hand control failed: ${error?.message ?? error}`
+      await showCacheState()
     }
   })
 
@@ -143,7 +182,10 @@ async function launch() {
   const originalFound = anchor.onTargetFound
   anchor.onTargetFound = () => {
     originalFound()
-    if (!handTracker) hand.hidden = false
+    if (hand.hidden) {
+      hand.hidden = false
+      showCacheState()
+    }
   }
 
   window.addEventListener('pagehide', () => {

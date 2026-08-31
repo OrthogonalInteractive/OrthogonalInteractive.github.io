@@ -1,5 +1,11 @@
 @import '../style.css';
 
+/* The panels below set their own display, which would otherwise beat the user
+   agent's [hidden] rule and leave them on screen permanently. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   overflow: hidden;
   overscroll-behavior: none;
@@ -169,8 +175,26 @@ body {
 }
 
 .hand__note {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
   font-family: var(--font-mono);
   font-size: 0.62rem;
   letter-spacing: 0.1em;
   color: var(--fg-faint);
+}
+
+.hand__clear {
+  padding: 0;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--steel);
+  font: inherit;
+  cursor: pointer;
+}
+
+.hand__clear:hover {
+  color: var(--cyan);
+  border-bottom-color: var(--cyan);
 }

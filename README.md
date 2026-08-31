@@ -38,6 +38,13 @@ MediaPipe HandLandmarker（WASM 11 MB ＋ モデル 7.5 MB）を読み込んで�
 ピンチでオブジェクトを掴んで回せる。押さなければ表示のみ。
 
 アセットは `public/xr/mediapipe/` に同梱している（第三者ホストに依存しない）。
+ダウンロード済みかどうかの表示・キャッシュ削除・再ダウンロードのために
+Cache Storage に保存し、`public/xr/sw.js`（スコープ `/xr/`）がそこから
+MediaPipe に返す。MediaPipe は自前のローダー内で URL を fetch するので、
+Service Worker を挟まないとページが持っているキャッシュに当たらない。
+GitHub Pages の HTTP キャッシュは `max-age=600` しか付けられず、
+iOS Safari では 11 MB が残る保証もないため、保存を自前の制御下に置いている。
+
 更新するとき:
 
 ```bash
