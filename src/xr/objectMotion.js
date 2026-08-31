@@ -1,6 +1,7 @@
 const SPIN_DAMPING = 0.94 // per 1/60 s once the finger lifts
 const SPIN_FLOOR = 0.02 // radians per second below which it has stopped
 const HIGHLIGHT_RATE = 9 // how fast the glow follows the hand, per second
+const FADE_RATE = 10 // how fast it fades once the mark is out of sight
 const HIGHLIGHT_SWELL = 0.07 // extra scale at full highlight
 
 /**
@@ -16,10 +17,22 @@ export function createMotion(group, { baseScale = 1 } = {}) {
   let spinSpeed = 0
   let highlight = 0
   let target = 0
+  let presence = 1
+  let present = true
 
   return {
     get highlight() {
       return highlight
+    },
+
+    /** 0..1, how faded in the object currently is. */
+    get presence() {
+      return presence
+    },
+
+    /** Whether the object should be on screen at all. */
+    setPresent(next) {
+      present = next
     },
 
     /** A stroke: turn by `angle` about the model's upright axis. */
@@ -41,6 +54,10 @@ export function createMotion(group, { baseScale = 1 } = {}) {
     },
 
     update(delta) {
+      presence += ((present ? 1 : 0) - presence) * Math.min(1, delta * FADE_RATE)
+      if (present && presence < 0.01) presence = 0.01
+      group.visible = presence > 0.005
+
       highlight += (target - highlight) * Math.min(1, delta * HIGHLIGHT_RATE)
       group.scale.setScalar(baseScale * (1 + highlight * HIGHLIGHT_SWELL))
 

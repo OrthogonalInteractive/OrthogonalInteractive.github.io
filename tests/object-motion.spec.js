@@ -100,6 +100,36 @@ describe('createMotion', () => {
     expect(group.quaternion.angleTo(settled)).toBe(0)
   })
 
+  it('fades out when it is no longer present, and hides once faded', () => {
+    const { group, motion } = setup()
+
+    motion.setPresent(false)
+    for (let i = 0; i < 90; i += 1) motion.update(1 / 60)
+
+    expect(motion.presence).toBeLessThan(0.01)
+    expect(group.visible).toBe(false)
+  })
+
+  it('comes back the moment it is present again', () => {
+    const { group, motion } = setup()
+    motion.setPresent(false)
+    for (let i = 0; i < 90; i += 1) motion.update(1 / 60)
+
+    motion.setPresent(true)
+    motion.update(1 / 60)
+
+    // Visible again straight away, so the rise out of the card is not missed.
+    expect(group.visible).toBe(true)
+  })
+
+  it('starts out present', () => {
+    const { group, motion } = setup()
+    motion.update(1 / 60)
+
+    expect(motion.presence).toBe(1)
+    expect(group.visible).toBe(true)
+  })
+
   it('reports how lit it is, for materials to follow', () => {
     const { motion } = setup()
 

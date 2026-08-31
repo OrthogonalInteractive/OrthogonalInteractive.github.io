@@ -68,6 +68,12 @@ export async function loadCatModel() {
 
     spin: motion.spin,
     setHighlight: motion.setHighlight,
+    setPresent: motion.setPresent,
+
+    /** True once it has faded out of sight entirely. */
+    get gone() {
+      return motion.presence <= 0.01
+    },
 
     /** Play the climb out of the card, from the pose it was built with. */
     reveal() {
@@ -103,6 +109,8 @@ export async function loadCatModel() {
         EMISSIVE_REST + (EMISSIVE_LIT - EMISSIVE_REST) * motion.highlight
       materials.forEach((material) => {
         material.emissiveIntensity = intensity
+        material.opacity = motion.presence
+        material.transparent = motion.presence < 1
       })
     },
 

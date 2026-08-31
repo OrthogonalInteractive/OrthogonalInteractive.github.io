@@ -184,6 +184,13 @@ async function launch() {
   renderer.localClippingEnabled = true
   cat.applyClipping(clipPlane)
 
+  // A hand covering the mark and the camera being taken off it look identical
+  // to the tracker, so they are told apart by how long the loss lasts — and a
+  // hand in frame keeps the object regardless, since that is the occluding case.
+  const HIDE_AFTER = 700
+  let lostSince = -Infinity
+  let handSeen = false
+
   // Where the object sits on screen this frame; both the fingertip and a
   // swiping thumb are measured against it.
   let circle = null
@@ -239,7 +246,14 @@ async function launch() {
       holder.matrix.copy(anchor.group.matrix)
       holder.matrixWorldNeedsUpdate = true
       holder.visible = true
+      lostSince = Infinity
     }
+
+    cat.setPresent(
+      anchor.group.visible ||
+        handSeen ||
+        performance.now() - lostSince < HIDE_AFTER,
+    )
     holder.updateMatrixWorld(true)
     markerNormal.setFromMatrixColumn(holder.matrixWorld, 2).normalize()
     objectPosition.setFromMatrixPosition(holder.matrixWorld)
@@ -257,6 +271,7 @@ async function launch() {
       // place the finger in front of or behind the object.
       const rect = videoRect(mindarThree.video)
       const point = landmarks ? fingertip(landmarks, rect) : null
+      handSeen = Boolean(landmarks)
       touching = isTouching(point, circle)
 
       // Rotation is confined to the mark's normal, so only how far the finger
@@ -288,10 +303,6 @@ async function launch() {
     renderer.render(scene, camera)
   })
 
-  // Tracking flickers, and replaying the rise on every stutter would strobe.
-  const REARM_AFTER = 500
-  let lostSince = -Infinity
-
   anchor.onTargetLost = () => {
     lostSince = performance.now()
     hint.classList.remove('is-found')
@@ -303,9 +314,8 @@ async function launch() {
     hint.classList.add('is-found')
     hintText.textContent = 'Mark found'
 
-    // A first sighting, or a real loss rather than a stutter: rise again from
-    // inside the card, back at the heading it started from.
-    if (performance.now() - lostSince > REARM_AFTER) cat.reveal()
+    // Rise again only if it had actually gone; a stutter should not restart it.
+    if (cat.gone) cat.reveal()
 
     // Offer hand control only once the mark has actually been registered.
     if (hand.hidden) {
