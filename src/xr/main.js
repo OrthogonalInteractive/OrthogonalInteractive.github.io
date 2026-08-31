@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { MindARThree } from 'mind-ar/dist/mindar-image-three.prod.js'
-import { createBrandObject } from './brandObject.js'
+import { loadCatModel } from './catModel.js'
 import { fingertip, isTouching, screenCircle } from './contact.js'
 import { createHandOverlay, videoRect } from './handOverlay.js'
 import { HAND_ASSETS, HAND_CACHE, createAssetStore, installAssetWorker } from './handAssets.js'
@@ -16,9 +16,6 @@ const STROKE_GAIN = 0.007
 // Hand detection every other frame keeps the interaction responsive without
 // paying for it on every render.
 const DETECT_EVERY = 2
-
-// Roughly the outer ring, in mark widths — what counts as touching the object.
-const CONTACT_RADIUS = 0.6
 
 const debugPanel = document.querySelector('#debug')
 const debugging = new URLSearchParams(location.search).has('debug')
@@ -67,7 +64,7 @@ async function launch() {
   rimLight.position.set(-0.8, -0.4, 1)
   scene.add(rimLight)
 
-  const brand = createBrandObject()
+  const cat = await loadCatModel()
   const anchor = mindarThree.addAnchor(0)
 
   // The object rides its own group rather than the anchor's. MindAR wipes a
@@ -76,7 +73,7 @@ async function launch() {
   const holder = new THREE.Group()
   holder.matrixAutoUpdate = false
   holder.visible = false
-  holder.add(brand.group)
+  holder.add(cat.group)
   scene.add(holder)
 
   anchor.onTargetFound = () => {
@@ -197,7 +194,7 @@ async function launch() {
       const size = { width: window.innerWidth, height: window.innerHeight }
       markerScale.setFromMatrixColumn(holder.matrixWorld, 0)
       const circle = holder.visible
-        ? screenCircle(brand.group, camera, CONTACT_RADIUS * markerScale.length(), size)
+        ? screenCircle(cat.group, camera, cat.radius * markerScale.length(), size)
         : null
       const point = landmarks ? fingertip(landmarks, rect) : null
       touching = isTouching(point, circle)
@@ -209,10 +206,10 @@ async function launch() {
         cameraUp.setFromMatrixColumn(camera.matrixWorld, 1)
         cameraRight.setFromMatrixColumn(camera.matrixWorld, 0)
         spinAxis.copy(cameraUp).multiplyScalar(dx).addScaledVector(cameraRight, -dy)
-        brand.spin(spinAxis, Math.hypot(dx, dy) * STROKE_GAIN)
+        cat.spin(spinAxis, Math.hypot(dx, dy) * STROKE_GAIN)
       }
 
-      brand.setHighlight(touching ? 1 : 0)
+      cat.setHighlight(touching ? 1 : 0)
       overlay.draw(landmarks, rect, { touching })
       hint.classList.toggle('is-found', touching)
 
@@ -227,7 +224,7 @@ async function launch() {
       }
     }
 
-    brand.update(delta)
+    cat.update(delta)
     renderer.render(scene, camera)
   })
 
@@ -246,7 +243,7 @@ async function launch() {
     handTracker?.close()
     overlay.dispose()
     mindarThree.stop()
-    brand.dispose()
+    cat.dispose()
   })
 }
 
