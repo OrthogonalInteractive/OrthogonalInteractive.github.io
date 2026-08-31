@@ -28,8 +28,12 @@
         Allow camera access, then hold the printed Orthogonal Interactive mark in
         view. A 3D object appears on top of it.
       </p>
-      <button id="start" class="panel__button" type="button">Start camera</button>
-      <p id="note" class="panel__note"></p>
+      <!-- Enabled by main.js: the bundle is large, and a tap before it loads
+           would silently do nothing. -->
+      <button id="start" class="panel__button" type="button" disabled>
+        Start camera
+      </button>
+      <p id="note" class="panel__note">Loading…</p>
     </div>
 
     <p id="hint" class="hint" hidden>

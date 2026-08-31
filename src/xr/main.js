@@ -101,5 +101,6 @@ if (reason) {
   setNote(reason, true)
 } else {
   setNote('Camera stays on your device — nothing is uploaded.')
+  startButton.disabled = false
   startButton.addEventListener('click', launch, { once: true })
 }
