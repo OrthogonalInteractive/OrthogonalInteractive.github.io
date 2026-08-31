@@ -134,4 +134,21 @@ const services = [
   border-radius: 4px;
   color: var(--fg-faint);
 }
+
+/* Narrow screens: the cards sit over the fixed mark, so they let it through. */
+@media (max-width: 880px) {
+  .cards {
+    background: rgba(37, 52, 48, 0.55);
+    border-color: rgba(37, 52, 48, 0.55);
+  }
+
+  .card {
+    background: rgba(11, 18, 17, 0.55);
+    backdrop-filter: blur(2px);
+  }
+
+  .card:hover {
+    background: rgba(22, 33, 31, 0.66);
+  }
+}
 </style>

@@ -150,5 +150,15 @@ const facts = [
   .about {
     grid-template-columns: 1fr;
   }
+
+  /* Let the fixed mark read through the panel on narrow screens. */
+  .about__side {
+    background: linear-gradient(
+      180deg,
+      rgba(22, 33, 31, 0.58),
+      rgba(11, 18, 17, 0.58)
+    );
+    backdrop-filter: blur(2px);
+  }
 }
 </style>

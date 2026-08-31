@@ -75,31 +75,31 @@ useReveal(root)
   );
 }
 
-/* Narrow screens: the copy runs the full width, so a fixed watermark would
-   always sit under text or behind an opaque panel. Park the mark in reserved
-   space at the foot of the document instead, where nothing covers it. */
+/* Narrow screens: the copy runs the full width, so the mark stays fixed behind
+   everything at a low opacity, and the panels above it turn translucent so it
+   reads through them. Kept faint enough to leave body text legible. */
 @media (max-width: 880px) {
-  .page__main {
-    padding-bottom: min(46vh, 320px);
-  }
-
-  .backdrop {
-    position: absolute;
-    top: auto;
-    bottom: 0;
-    height: min(52vh, 380px);
-  }
-
   .backdrop__mark {
     right: 50%;
-    bottom: 3%;
-    width: min(84vw, 420px);
+    bottom: -10vh;
+    width: min(150vw, 700px);
     transform: translateX(50%);
-    opacity: 0.62;
+    opacity: 0.55;
+    /* Widen the fade so more of the wireframe survives at this size. */
+    mask-image: radial-gradient(
+      ellipse 62% 62% at 50% 50%,
+      #000 0%,
+      #000 45%,
+      transparent 86%
+    );
   }
 
   .backdrop__veil {
-    background: linear-gradient(180deg, var(--ink-800) 0%, transparent 42%);
+    background: linear-gradient(
+      180deg,
+      rgba(11, 18, 17, 0.55) 0%,
+      transparent 34%
+    );
   }
 }
 </style>
