@@ -42,7 +42,7 @@ function setNote(message, isError = false) {
 
 async function launch() {
   startButton.disabled = true
-  setNote('Starting camera…')
+  setNote('カメラを起動しています…')
 
   const mindarThree = new MindARThree({
     container: document.querySelector('#scene'),
@@ -144,8 +144,8 @@ async function launch() {
     const denied = error?.name === 'NotAllowedError'
     setNote(
       denied
-        ? 'Camera access was blocked. Allow it in the browser settings and try again.'
-        : `Could not start: ${error?.message ?? error}`,
+        ? 'カメラの使用が拒否されました。ブラウザの設定で許可してから、もう一度お試しください。'
+        : `開始できませんでした: ${error?.message ?? error}`,
       true,
     )
     return
@@ -255,7 +255,7 @@ if (reason) {
   startButton.disabled = true
   setNote(reason, true)
 } else {
-  setNote('Camera stays on your device — nothing is uploaded.')
+  setNote('カメラ映像は端末内で処理され、送信されません。')
   startButton.disabled = false
   startButton.addEventListener('click', launch, { once: true })
 }

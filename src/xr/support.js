@@ -6,11 +6,11 @@
  * sitting on "looking for the mark" forever with no explanation.
  */
 export function unsupportedReason() {
-  if (!window.isSecureContext) return 'This page needs HTTPS to reach the camera.'
+  if (!window.isSecureContext) return 'カメラを使うには HTTPS 接続が必要です。'
   if (!navigator.mediaDevices?.getUserMedia) {
-    return 'This browser does not expose a camera to web pages.'
+    return 'このブラウザは Web ページにカメラを渡していません。'
   }
-  if (!hasWebGL()) return 'This browser cannot run WebGL, which the tracker needs.'
+  if (!hasWebGL()) return 'このブラウザは WebGL に対応していないため、認識処理を実行できません。'
   return null
 }
 

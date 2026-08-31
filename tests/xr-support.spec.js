@@ -19,7 +19,7 @@ describe('unsupportedReason', () => {
     vi.stubGlobal('isSecureContext', true)
     vi.stubGlobal('navigator', {})
 
-    expect(unsupportedReason()).toMatch(/camera/i)
+    expect(unsupportedReason()).toMatch(/カメラ/)
   })
 
   it('reports the missing WebGL context', () => {

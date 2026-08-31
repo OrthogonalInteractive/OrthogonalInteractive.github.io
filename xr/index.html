@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="ja">
   <head>
     <meta charset="UTF-8" />
     <meta
@@ -8,7 +8,7 @@
     />
     <link rel="icon" type="image/png" href="/org-icon.png" />
     <title>Orthogonal Interactive — AR</title>
-    <meta name="description" content="Point your camera at the Orthogonal Interactive mark." />
+    <meta name="description" content="名刺のマークにカメラを向けると、3Dオブジェクトが現れます。" />
     <meta name="theme-color" content="#0b1211" />
     <meta name="robots" content="noindex" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -25,17 +25,16 @@
 
     <div id="intro" class="panel">
       <img class="panel__mark" src="/org-icon.png" alt="" width="88" height="88" />
-      <h1 class="panel__title">Point at the mark</h1>
-      <p class="panel__body">
-        Allow camera access, then hold the printed Orthogonal Interactive mark in
-        view. A 3D object appears on top of it.
-      </p>
+      <h1 class="panel__title">このモデルをカメラに写してください</h1>
+      <!-- Kept on one line: a newline here collapses to a space, which shows
+           as a gap after the Japanese full stop. -->
+      <p class="panel__body">カメラの使用を許可したあと、印刷されたマークを画面に収めてください。その上に3Dオブジェクトが現れます。</p>
       <!-- Enabled by main.js: the bundle is large, and a tap before it loads
            would silently do nothing. -->
       <button id="start" class="panel__button" type="button" disabled>
-        Start camera
+        カメラを開始
       </button>
-      <p id="note" class="panel__note">Loading…</p>
+      <p id="note" class="panel__note">読み込み中…</p>
     </div>
 
     <p id="hint" class="hint" hidden>
