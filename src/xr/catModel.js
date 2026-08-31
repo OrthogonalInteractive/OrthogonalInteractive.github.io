@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { createEmergence } from './emerge.js'
-import { fitToMarker } from './fit.js'
+import { fitToMarker, restBounds } from './fit.js'
 import { createMotion } from './objectMotion.js'
 
 const MODEL_URL = '/xr/cat.glb'
@@ -31,7 +31,7 @@ export async function loadCatModel() {
   // glTF is Y-up; a MindAR anchor's Z points out of the card.
   model.rotation.x = Math.PI / 2
 
-  const box = new THREE.Box3().setFromObject(model)
+  const box = restBounds(model)
   const { scale, z, radius } = fitToMarker(box, { width: WIDTH, hover: HOVER })
   model.scale.setScalar(scale)
 
@@ -58,13 +58,21 @@ export async function loadCatModel() {
     material.emissive = new THREE.Color(0xffffff)
     material.emissiveIntensity = EMISSIVE_REST
     materials.push(material)
+    // The skinned bounds are computed from the rest pose, and the idle motion
+    // is small enough that culling on them would only ever be wrong.
+    child.frustumCulled = false
   })
+
+  // The sleeping cat breathes and flicks its tail on a five second loop.
+  const mixer = gltf.animations.length ? new THREE.AnimationMixer(model) : null
+  gltf.animations.forEach((clip) => mixer.clipAction(clip).play())
 
   const motion = createMotion(group)
 
   return {
     group,
     radius,
+    fitScale: scale,
 
     spin: motion.spin,
     setHighlight: motion.setHighlight,
@@ -103,7 +111,13 @@ export async function loadCatModel() {
       heading.rotation.z = (degrees * Math.PI) / 180
     },
 
+    /** Seconds into the idle loop — the debug readout reports this. */
+    get animationTime() {
+      return mixer ? mixer.time : 0
+    },
+
     update(delta) {
+      mixer?.update(delta)
       motion.update(delta)
       group.position.z = rise.update(delta)
       const intensity =
@@ -116,6 +130,7 @@ export async function loadCatModel() {
     },
 
     dispose() {
+      mixer?.stopAllAction()
       model.traverse((child) => {
         if (!child.isMesh) return
         child.geometry.dispose()

@@ -385,6 +385,8 @@ async function launch() {
         `screen  ${screenPinch.scale.toFixed(2)}x`,
         `touch   ${touching ? 'YES' : 'no'}`,
         `turn    ${cat.turn}deg`,
+        `anim    ${cat.animationTime.toFixed(1)}s`,
+        `fit     r=${cat.radius.toFixed(2)} s=${cat.fitScale.toFixed(3)}`,
         `object  ${circle ? `${circle.x.toFixed(0)},${circle.y.toFixed(0)} r${circle.r.toFixed(0)}` : '-'}`,
       ].join('\n')
     }

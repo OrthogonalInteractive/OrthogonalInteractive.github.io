@@ -2,3 +2,7 @@ node_modules
 dist
 .DS_Store
 *.local
+
+# Blender working files
+*.blend
+*.blend[0-9]
