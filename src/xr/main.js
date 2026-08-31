@@ -59,6 +59,7 @@ async function launch() {
   const stroke = createStrokeTracker()
   const pinch = createPinchScale()
   let handTracker = null
+  let handOn = false
   let frame = 0
   let touching = false
 
@@ -103,7 +104,33 @@ async function launch() {
       : 'Adds a 19 MB download'
   })
 
+  /** Stops reading the camera for hands without discarding the loaded model. */
+  function handControlOff() {
+    handOn = false
+    handSeen = false
+    touching = false
+    pinched = false
+    overlay.clear()
+    cat.setSize(1)
+    cat.setHighlight(0)
+    handButton.textContent = 'Enable hand control'
+    hintText.textContent = 'Swipe it to turn'
+    showCacheState()
+  }
+
+  function handControlOn() {
+    handOn = true
+    handButton.textContent = 'Turn hand control off'
+    hintText.textContent = 'Stroke it to turn'
+    handNote.textContent = 'Hand control on'
+  }
+
   handButton.addEventListener('click', async () => {
+    if (handOn) return handControlOff()
+
+    // Already loaded once this session: switching back on costs nothing.
+    if (handTracker) return handControlOn()
+
     handButton.disabled = true
     handClear.hidden = true
     try {
@@ -120,10 +147,9 @@ async function launch() {
       // Resolve everything before touching the UI, so the panel never shows a
       // half-applied state.
       const cached = await assets.isCached()
-      handButton.hidden = true
+      handButton.disabled = false
       handClear.hidden = !cached
-      hintText.textContent = 'Stroke it to turn'
-      handNote.textContent = 'Hand control on'
+      handControlOn()
     } catch (error) {
       handButton.disabled = false
       handNote.textContent = `Hand control failed: ${error?.message ?? error}`
@@ -189,7 +215,12 @@ async function launch() {
   // A hand covering the mark and the camera being taken off it look identical
   // to the tracker, so they are told apart by how long the loss lasts — and a
   // hand in frame keeps the object regardless, since that is the occluding case.
-  const HIDE_AFTER = 700
+  //
+  // Tracking drops out constantly in ordinary use: a hand's shadow, motion
+  // blur, an awkward angle. Without hand control there is no hand to vouch for
+  // those, so the wait has to be long enough to ride them out — otherwise the
+  // model blinks away and comes back up out of the card over and over.
+  const HIDE_AFTER = 2000
   let lostSince = -Infinity
   let handSeen = false
   let pinched = false
@@ -214,7 +245,7 @@ async function launch() {
   let handReadout = []
 
   document.addEventListener('pointerdown', (event) => {
-    if (handTracker || event.target.closest('button, a')) return
+    if (handOn || event.target.closest('button, a')) return
     const point = { x: event.clientX, y: event.clientY }
     if (!isTouching(point, circle)) return
     swiping = true
@@ -255,6 +286,7 @@ async function launch() {
     cat.setPresent(
       anchor.group.visible ||
         handSeen ||
+        swiping ||
         performance.now() - lostSince < HIDE_AFTER,
     )
     holder.updateMatrixWorld(true)
@@ -268,7 +300,7 @@ async function launch() {
       ? screenCircle(cat.group, camera, cat.radius * markerScale.length(), size)
       : null
 
-    if (handTracker && frame++ % DETECT_EVERY === 0) {
+    if (handOn && frame++ % DETECT_EVERY === 0) {
       const landmarks = handTracker.detect(mindarThree.video, performance.now())
       // Contact is judged on screen: the landmarks carry no depth that could
       // place the finger in front of or behind the object.
