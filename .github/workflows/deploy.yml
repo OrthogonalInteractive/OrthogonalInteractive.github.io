@@ -23,7 +23,11 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      # mind-ar pulls in node-canvas, whose native build needs system libraries
+      # this runner does not have. Nothing in the build or the tests uses it —
+      # it only backs `npm run compile:target`, which runs locally and whose
+      # output (public/xr/targets.mind) is committed.
+      - run: npm ci --ignore-scripts
       - run: npm test
       - run: npm run build
       - uses: actions/configure-pages@v5

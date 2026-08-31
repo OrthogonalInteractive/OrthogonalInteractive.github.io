@@ -26,6 +26,11 @@ npm run compile:target   # public/xr/targets.mind を再生成
 `three` は **0.160.1 に固定**している。mind-ar 1.2.5 が three から
 `sRGBEncoding` を import しており、0.166 以降では削除されているため。
 
+mind-ar は node-canvas を引き連れてくるが、これを使うのは上の
+`compile:target` だけ。CI ではネイティブビルドが通らないので
+`npm ci --ignore-scripts` でインストールしている（ビルドにもテストにも
+node-canvas は不要）。
+
 ## 開発
 
 ```bash
