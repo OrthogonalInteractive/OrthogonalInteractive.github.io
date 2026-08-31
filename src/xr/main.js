@@ -188,14 +188,14 @@ async function launch() {
   // swiping thumb are measured against it.
   let circle = null
 
-  /** Turns a swept angle into rotation about the mark's normal. */
+  /** Turns a swept angle into rotation about the model's upright axis. */
   function spinBy(swept) {
     if (!swept) return
     // Screen y points down, so a sweep that reads clockwise turns the object
-    // negatively about a normal facing the lens.
+    // negatively when the card is facing the lens.
     toCamera.subVectors(camera.position, objectPosition)
     const facing = markerNormal.dot(toCamera) > 0 ? -1 : 1
-    cat.spin(markerNormal, swept * facing * SPIN_GAIN)
+    cat.spin(swept * facing * SPIN_GAIN)
   }
 
   // Until hand control is switched on, the same turntable answers to a swipe.

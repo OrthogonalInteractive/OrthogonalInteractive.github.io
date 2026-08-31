@@ -1,5 +1,3 @@
-import { Vector3 } from 'three'
-
 const SPIN_DAMPING = 0.94 // per 1/60 s once the finger lifts
 const SPIN_FLOOR = 0.02 // radians per second below which it has stopped
 const HIGHLIGHT_RATE = 9 // how fast the glow follows the hand, per second
@@ -8,11 +6,12 @@ const HIGHLIGHT_SWELL = 0.07 // extra scale at full highlight
 /**
  * Stroke-driven rotation with inertia, plus an eased highlight level.
  *
- * The group's own scale is used for the swell, so whatever is being driven only
- * has to hand over a group and read `highlight` for its materials.
+ * Rotation is confined to the group's own Z, which is where the model's upright
+ * axis lands once it is stood up on the mark. Doing it locally also sidesteps
+ * three's world-axis rotation, which assumes an unrotated parent — and here the
+ * parent carries the mark's pose.
  */
 export function createMotion(group, { baseScale = 1 } = {}) {
-  const spinAxis = new Vector3(0, 1, 0)
   let pendingAngle = 0
   let spinSpeed = 0
   let highlight = 0
@@ -23,10 +22,9 @@ export function createMotion(group, { baseScale = 1 } = {}) {
       return highlight
     },
 
-    /** A stroke: turn by `angle` about a world-space `axis`. */
-    spin(axis, angle) {
+    /** A stroke: turn by `angle` about the model's upright axis. */
+    spin(angle) {
       if (!angle) return
-      spinAxis.copy(axis).normalize()
       pendingAngle += angle
     },
 
@@ -47,7 +45,7 @@ export function createMotion(group, { baseScale = 1 } = {}) {
       group.scale.setScalar(baseScale * (1 + highlight * HIGHLIGHT_SWELL))
 
       if (pendingAngle) {
-        group.rotateOnWorldAxis(spinAxis, pendingAngle)
+        group.rotateZ(pendingAngle)
         // Carry the stroke's speed into the coast that follows it.
         spinSpeed = pendingAngle / Math.max(delta, 1 / 240)
         pendingAngle = 0
@@ -59,7 +57,7 @@ export function createMotion(group, { baseScale = 1 } = {}) {
         return
       }
       spinSpeed *= SPIN_DAMPING ** (delta * 60)
-      group.rotateOnWorldAxis(spinAxis, spinSpeed * delta)
+      group.rotateZ(spinSpeed * delta)
     },
   }
 }

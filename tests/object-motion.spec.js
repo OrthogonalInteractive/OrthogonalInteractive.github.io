@@ -17,19 +17,38 @@ describe('createMotion', () => {
     expect(group.quaternion.angleTo(before)).toBe(0)
   })
 
-  it('turns about the axis it is stroked along', () => {
+  it('turns about its own upright axis', () => {
     const { group, motion } = setup()
-    const before = group.quaternion.clone()
 
-    motion.spin(new THREE.Vector3(0, 1, 0), 0.4)
+    motion.spin(0.4)
     motion.update(1 / 60)
 
-    expect(group.quaternion.angleTo(before)).toBeCloseTo(0.4, 2)
+    expect(group.rotation.z).toBeCloseTo(0.4, 5)
+    expect(group.rotation.x).toBeCloseTo(0, 6)
+    expect(group.rotation.y).toBeCloseTo(0, 6)
+  })
+
+  it('keeps to that axis even under a rotated parent', () => {
+    // The mark's pose sits on the parent. three's world-axis rotation assumes
+    // an unrotated parent, which is how the axis drifted before.
+    const parent = new THREE.Group()
+    parent.rotation.set(0.6, -0.4, 0.9)
+    const { group, motion } = setup()
+    parent.add(group)
+
+    motion.spin(0.5)
+    motion.update(1 / 60)
+    motion.spin(0.5)
+    motion.update(1 / 60)
+
+    expect(group.rotation.z).toBeCloseTo(1, 5)
+    expect(group.rotation.x).toBeCloseTo(0, 6)
+    expect(group.rotation.y).toBeCloseTo(0, 6)
   })
 
   it('carries on turning after the finger lifts, then stops', () => {
     const { group, motion } = setup()
-    motion.spin(new THREE.Vector3(0, 1, 0), 0.3)
+    motion.spin(0.3)
     motion.update(1 / 60)
     const afterStroke = group.quaternion.clone()
 
@@ -60,7 +79,7 @@ describe('createMotion', () => {
 
   it('returns to its starting pose when reset', () => {
     const { group, motion } = setup()
-    motion.spin(new THREE.Vector3(0, 1, 0), 1.2)
+    motion.spin(1.2)
     motion.update(1 / 60)
 
     motion.reset()
@@ -70,7 +89,7 @@ describe('createMotion', () => {
 
   it('stops coasting when reset', () => {
     const { group, motion } = setup()
-    motion.spin(new THREE.Vector3(0, 1, 0), 1.2)
+    motion.spin(1.2)
     motion.update(1 / 60)
 
     motion.reset()
