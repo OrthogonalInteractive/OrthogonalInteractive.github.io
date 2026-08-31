@@ -18,7 +18,7 @@ export function createGrabSession({
   let absent = 0
 
   return {
-    apply({ handPresent, gesture }) {
+    apply({ handPresent, contact, gesture }) {
       if (handPresent) {
         absent = 0
         if (!latched) {
@@ -29,14 +29,16 @@ export function createGrabSession({
         absent += 1
       }
 
-      if (gesture.justGrabbed) {
+      // Only a pinch made on the object takes hold; once held, the hand is
+      // free to move off it.
+      if (gesture.justGrabbed && contact) {
         holding = true
         object.setGrabbed(true)
       }
 
       // Image space has y pointing down, so the sign flips to make a clockwise
       // wrist turn read as a clockwise spin.
-      if (gesture.pinching) object.setTwist(-gesture.twist * twistGain)
+      if (holding && gesture.pinching) object.setTwist(-gesture.twist * twistGain)
 
       if (gesture.justReleased && holding) {
         holding = false

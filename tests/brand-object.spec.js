@@ -104,6 +104,30 @@ describe('createBrandObject', () => {
     expect(object.group.rotation.z).toBeCloseTo(0.8, 2)
   })
 
+  it('brightens and swells while a hand is on it', () => {
+    const object = createBrandObject()
+    const rings = object.rings.map((ring) => ring.material.opacity)
+    const scale = object.group.scale.x
+
+    object.setHighlight(1)
+    for (let i = 0; i < 30; i += 1) object.update(1 / 60)
+
+    expect(object.group.scale.x).toBeGreaterThan(scale)
+    object.rings.forEach((ring, i) => expect(ring.material.opacity).toBeGreaterThan(rings[i]))
+  })
+
+  it('settles back once the hand leaves', () => {
+    const object = createBrandObject()
+    const scale = object.group.scale.x
+    object.setHighlight(1)
+    for (let i = 0; i < 30; i += 1) object.update(1 / 60)
+
+    object.setHighlight(0)
+    for (let i = 0; i < 60; i += 1) object.update(1 / 60)
+
+    expect(object.group.scale.x).toBeCloseTo(scale, 3)
+  })
+
   it('releases every geometry and material on dispose', () => {
     const { group, dispose } = createBrandObject()
     const spies = []

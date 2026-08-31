@@ -20,6 +20,10 @@ const GRAVITY = 4 // fall acceleration once let go, in mark widths per second²
 const RESTITUTION = 0.28 // how much of the impact speed the bounce keeps
 const SETTLE_SPEED = 0.02 // below this the bounce is over
 
+const HIGHLIGHT_RATE = 9 // how fast the glow follows the hand, per second
+const HIGHLIGHT_SWELL = 0.09 // extra scale at full highlight
+const HIGHLIGHT_EMISSIVE = 0x1b3d47
+
 /**
  * The studio's form — a low-poly core inside three mutually orthogonal rings —
  * built to sit on top of the tracked image.
@@ -33,6 +37,8 @@ export function createBrandObject() {
   let velocity = 0
   let baseRotation = 0
   let twist = 0
+  let highlight = 0
+  let highlightTarget = 0
 
   const coreGeometry = new THREE.IcosahedronGeometry(CORE_RADIUS, 1)
   const coreMaterial = new THREE.MeshStandardMaterial({
@@ -64,6 +70,7 @@ export function createBrandObject() {
       new THREE.MeshBasicMaterial({ color, transparent: true, opacity }),
     )
     ring.rotation.set(...rotation)
+    ring.userData.restOpacity = opacity
     group.add(ring)
     return ring
   })
@@ -71,6 +78,14 @@ export function createBrandObject() {
   return {
     group,
     rings,
+
+    /**
+     * How strongly the object should read as touched, 0..1. The response is
+     * eased in update() so a flickering detection does not strobe.
+     */
+    setHighlight(value) {
+      highlightTarget = Math.min(1, Math.max(0, value))
+    },
 
     /** Held or let go. Releasing folds the current twist into the resting pose. */
     setGrabbed(next) {
@@ -90,8 +105,17 @@ export function createBrandObject() {
       group.rotation.z = baseRotation + twist
     },
 
-    /** Advances the lift and the drop. `delta` is in seconds. */
+    /** Advances the highlight, the lift and the drop. `delta` is in seconds. */
     update(delta) {
+      highlight += (highlightTarget - highlight) * Math.min(1, delta * HIGHLIGHT_RATE)
+      group.scale.setScalar(1 + highlight * HIGHLIGHT_SWELL)
+      edges.material.opacity = 0.9 + highlight * 0.1
+      coreMaterial.emissive.setHex(HIGHLIGHT_EMISSIVE).multiplyScalar(highlight)
+      rings.forEach((ring) => {
+        const rest = ring.userData.restOpacity
+        ring.material.opacity = rest + (1 - rest) * highlight
+      })
+
       if (grabbed) {
         group.position.z += (LIFT_Z - group.position.z) * Math.min(1, delta * LIFT_RATE)
         return

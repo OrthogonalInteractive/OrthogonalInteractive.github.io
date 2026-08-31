@@ -17,8 +17,9 @@ function setup(options = {}) {
 }
 
 const idle = { pinching: false, justGrabbed: false, justReleased: false, twist: 0 }
-const away = { handPresent: false, gesture: idle }
-const near = { handPresent: true, gesture: idle }
+const away = { handPresent: false, contact: false, gesture: idle }
+const near = { handPresent: true, contact: false, gesture: idle }
+const onObject = (gesture) => ({ handPresent: true, contact: true, gesture })
 
 describe('createGrabSession', () => {
   it('freezes the tracker the moment a hand appears, before any pinch', () => {
@@ -36,16 +37,34 @@ describe('createGrabSession', () => {
 
     session.apply(near)
     session.apply(near)
-    session.apply({ handPresent: true, gesture: { ...idle, pinching: true, justGrabbed: true } })
+    session.apply(onObject({ ...idle, pinching: true, justGrabbed: true }))
 
     expect(onLatch).toHaveBeenCalledTimes(1)
   })
 
+  it('ignores a pinch made away from the object', () => {
+    const { session, object } = setup()
+
+    session.apply({ handPresent: true, contact: false, gesture: { ...idle, pinching: true, justGrabbed: true } })
+
+    expect(object.setGrabbed).not.toHaveBeenCalled()
+  })
+
+  it('keeps hold once taken, even as the hand wanders off it', () => {
+    const { session, object } = setup()
+    session.apply(onObject({ ...idle, pinching: true, justGrabbed: true }))
+
+    session.apply({ handPresent: true, contact: false, gesture: { ...idle, pinching: true, twist: 0.5 } })
+
+    expect(object.setGrabbed).toHaveBeenLastCalledWith(true)
+    expect(object.setTwist).toHaveBeenLastCalledWith(-1)
+  })
+
   it('lifts and turns the object against the wrist', () => {
     const { session, object } = setup()
-    session.apply({ handPresent: true, gesture: { ...idle, pinching: true, justGrabbed: true } })
+    session.apply(onObject({ ...idle, pinching: true, justGrabbed: true }))
 
-    session.apply({ handPresent: true, gesture: { ...idle, pinching: true, twist: 0.3 } })
+    session.apply(onObject({ ...idle, pinching: true, twist: 0.3 }))
 
     expect(object.setGrabbed).toHaveBeenCalledWith(true)
     // Image space has y pointing down, so the sign flips.
@@ -54,11 +73,9 @@ describe('createGrabSession', () => {
 
   it('holds the tracker frozen while the object is still held', () => {
     const { session, onResume } = setup()
-    session.apply({ handPresent: true, gesture: { ...idle, pinching: true, justGrabbed: true } })
+    session.apply(onObject({ ...idle, pinching: true, justGrabbed: true }))
 
-    for (let i = 0; i < 10; i += 1) {
-      session.apply({ handPresent: true, gesture: { ...idle, pinching: true } })
-    }
+    for (let i = 0; i < 10; i += 1) session.apply(onObject({ ...idle, pinching: true }))
 
     expect(onResume).not.toHaveBeenCalled()
   })
@@ -90,9 +107,9 @@ describe('createGrabSession', () => {
 
   it('drops the object when the hand leaves mid-grab', () => {
     const { session, object } = setup()
-    session.apply({ handPresent: true, gesture: { ...idle, pinching: true, justGrabbed: true } })
+    session.apply(onObject({ ...idle, pinching: true, justGrabbed: true }))
 
-    session.apply({ handPresent: false, gesture: { ...idle, justReleased: true } })
+    session.apply({ handPresent: false, contact: false, gesture: { ...idle, justReleased: true } })
 
     expect(object.setGrabbed).toHaveBeenLastCalledWith(false)
   })

@@ -23,6 +23,28 @@ body {
   object-fit: cover;
 }
 
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.debug {
+  position: fixed;
+  z-index: 11;
+  top: max(1rem, env(safe-area-inset-top));
+  left: max(1rem, env(safe-area-inset-left));
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  background: rgba(11, 18, 17, 0.78);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  line-height: 1.7;
+  color: var(--cyan);
+}
+
 .panel {
   position: fixed;
   inset: 0;
