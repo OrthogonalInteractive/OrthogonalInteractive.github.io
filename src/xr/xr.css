@@ -45,6 +45,33 @@ body {
   color: var(--cyan);
 }
 
+.heading {
+  position: fixed;
+  z-index: 11;
+  top: max(1rem, env(safe-area-inset-top));
+  right: max(1rem, env(safe-area-inset-right));
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(11, 18, 17, 0.78);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--cyan);
+}
+
+.heading button {
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: none;
+  color: var(--cyan);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
 .panel {
   position: fixed;
   inset: 0;

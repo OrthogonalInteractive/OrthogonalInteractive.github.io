@@ -18,7 +18,10 @@ const STROKE_GAIN = 0.007
 const DETECT_EVERY = 2
 
 const debugPanel = document.querySelector('#debug')
+const headingPanel = document.querySelector('#heading')
+const headingValue = document.querySelector('#heading-value')
 const debugging = new URLSearchParams(location.search).has('debug')
+const HEADING_KEY = 'oi-xr-heading'
 
 const intro = document.querySelector('#intro')
 const startButton = document.querySelector('#start')
@@ -164,7 +167,24 @@ async function launch() {
     hintText.textContent = 'Mark found'
   }
 
-  if (debugging) debugPanel.hidden = false
+  if (debugging) {
+    debugPanel.hidden = false
+    headingPanel.hidden = false
+
+    // Lets the heading be measured against a real printed card, which is the
+    // only place the artwork and the model can actually be compared.
+    const stored = Number(localStorage.getItem(HEADING_KEY))
+    if (Number.isFinite(stored) && stored) cat.heading = stored
+    headingValue.textContent = `${cat.heading}°`
+
+    headingPanel.addEventListener('click', (event) => {
+      const turn = Number(event.target.dataset?.turn)
+      if (!turn) return
+      cat.heading = (((cat.heading + turn) % 360) + 360) % 360
+      headingValue.textContent = `${cat.heading}°`
+      localStorage.setItem(HEADING_KEY, String(cat.heading))
+    })
+  }
   const markerScale = new THREE.Vector3()
   const cameraUp = new THREE.Vector3()
   const cameraRight = new THREE.Vector3()

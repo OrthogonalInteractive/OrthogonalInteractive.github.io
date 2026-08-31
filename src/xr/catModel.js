@@ -15,6 +15,10 @@ const HOVER = 0.12
 const EMISSIVE_REST = 0.55
 const EMISSIVE_LIT = 1.15
 
+// Heading on the card, in degrees about the mark's normal. Tuned against the
+// printed artwork; /xr/?debug=1 exposes a control to re-measure it on a device.
+const HEADING = 0
+
 /** Loads the studio's cat and sits it upright on the tracked mark. */
 export async function loadCatModel() {
   const gltf = await new GLTFLoader().loadAsync(MODEL_URL)
@@ -25,11 +29,17 @@ export async function loadCatModel() {
 
   const box = new THREE.Box3().setFromObject(model)
   const { scale, z, radius } = fitToMarker(box, { width: WIDTH, hover: HOVER })
+  model.scale.setScalar(scale)
+
+  // Heading sits on its own group: the outer one carries the stroke rotation,
+  // so folding the two together would make them fight.
+  const heading = new THREE.Group()
+  heading.rotation.z = (HEADING * Math.PI) / 180
+  heading.add(model)
 
   const group = new THREE.Group()
   group.position.z = z
-  group.add(model)
-  model.scale.setScalar(scale)
+  group.add(heading)
 
   const materials = []
   model.traverse((child) => {
@@ -49,6 +59,14 @@ export async function loadCatModel() {
 
     spin: motion.spin,
     setHighlight: motion.setHighlight,
+
+    /** Heading on the card in degrees — the debug control drives this. */
+    get heading() {
+      return Math.round((heading.rotation.z * 180) / Math.PI)
+    },
+    set heading(degrees) {
+      heading.rotation.z = (degrees * Math.PI) / 180
+    },
 
     update(delta) {
       motion.update(delta)
