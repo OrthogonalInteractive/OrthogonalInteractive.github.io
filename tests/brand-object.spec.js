@@ -41,9 +41,67 @@ describe('createBrandObject', () => {
     const { group, update } = createBrandObject()
     const before = group.rotation.toArray()
 
-    update(5)
+    for (let i = 0; i < 60; i += 1) update(1 / 60)
 
     expect(group.rotation.toArray()).toEqual(before)
+  })
+
+  it('rises off the card while held', () => {
+    const object = createBrandObject()
+    const rest = object.group.position.z
+
+    object.setGrabbed(true)
+    for (let i = 0; i < 30; i += 1) object.update(1 / 60)
+
+    expect(object.group.position.z).toBeGreaterThan(rest + 0.1)
+  })
+
+  it('drops back and settles when let go', () => {
+    const object = createBrandObject()
+    const rest = object.group.position.z
+    object.setGrabbed(true)
+    for (let i = 0; i < 30; i += 1) object.update(1 / 60)
+
+    object.setGrabbed(false)
+    let lowest = Infinity
+    for (let i = 0; i < 180; i += 1) {
+      object.update(1 / 60)
+      lowest = Math.min(lowest, object.group.position.z)
+    }
+
+    // It lands on the card and stays there — never sinking through it.
+    expect(lowest).toBeGreaterThanOrEqual(rest - 1e-6)
+    expect(object.group.position.z).toBeCloseTo(rest, 3)
+  })
+
+  it('bounces once instead of stopping dead', () => {
+    const object = createBrandObject()
+    const rest = object.group.position.z
+    object.setGrabbed(true)
+    for (let i = 0; i < 30; i += 1) object.update(1 / 60)
+    object.setGrabbed(false)
+
+    const heights = []
+    for (let i = 0; i < 120; i += 1) {
+      object.update(1 / 60)
+      heights.push(object.group.position.z)
+    }
+    const landed = heights.findIndex((z) => z <= rest + 1e-6)
+    const afterLanding = heights.slice(landed)
+
+    expect(Math.max(...afterLanding)).toBeGreaterThan(rest + 0.005)
+  })
+
+  it('keeps the rotation the twist produced after release', () => {
+    const object = createBrandObject()
+    object.setGrabbed(true)
+    object.setTwist(0.8)
+    object.update(1 / 60)
+
+    object.setGrabbed(false)
+    for (let i = 0; i < 120; i += 1) object.update(1 / 60)
+
+    expect(object.group.rotation.z).toBeCloseTo(0.8, 2)
   })
 
   it('releases every geometry and material on dispose', () => {

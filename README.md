@@ -31,6 +31,29 @@ mind-ar は node-canvas を引き連れてくるが、これを使うのは上�
 `npm ci --ignore-scripts` でインストールしている（ビルドにもテストにも
 node-canvas は不要）。
 
+### ハンド操作（任意ロード）
+
+名刺を認識したあとに出る「Enable hand control」を押した人だけが、
+MediaPipe HandLandmarker（WASM 11 MB ＋ モデル 7.5 MB）を読み込んで、
+ピンチでオブジェクトを掴んで回せる。押さなければ表示のみ。
+
+アセットは `public/xr/mediapipe/` に同梱している（第三者ホストに依存しない）。
+更新するとき:
+
+```bash
+npm run fetch:hand-assets
+```
+
+SIMD 版 WASM のみを置いている。非SIMD版とESモジュール版は合わせて 21 MB あるが、
+Safari 16.4+ / Chrome 91+ はすべて SIMD 対応なので要求されない。
+
+**遮蔽対策**: 手が名刺を覆うと画像トラッキングがロストしてオブジェクトが飛ぶ。
+そのためピンチ開始時に `controller.stopProcessVideo()` で画像トラッカーを止め、
+アンカーの姿勢を保持したまま手の操作を受ける。離したら `processVideo()` で
+再開して名刺と再同期する。名刺は「常時のマーカー」ではなく
+「座標を決めるアンカー」として使っている。副次的に、掴んでいる間は
+CV パイプラインが1本になるのでハンドトラッキングの計算予算が空く。
+
 ## 開発
 
 ```bash

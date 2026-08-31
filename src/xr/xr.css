@@ -137,3 +137,40 @@ body {
 .back:hover {
   color: var(--cyan);
 }
+
+.hand {
+  position: fixed;
+  z-index: 10;
+  left: max(1.5rem, env(safe-area-inset-left));
+  right: max(1.5rem, env(safe-area-inset-right));
+  bottom: calc(max(1.5rem, env(safe-area-inset-bottom)) + 3rem);
+  display: grid;
+  justify-items: start;
+  gap: 0.5rem;
+}
+
+.hand__button {
+  padding: 0.65rem 1.2rem;
+  border: 1px solid var(--cyan);
+  border-radius: 999px;
+  background: rgba(11, 18, 17, 0.72);
+  backdrop-filter: blur(8px);
+  color: var(--cyan);
+  font-family: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: background 0.25s var(--ease);
+}
+
+.hand__button:disabled {
+  border-color: var(--line);
+  color: var(--fg-faint);
+  cursor: default;
+}
+
+.hand__note {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  color: var(--fg-faint);
+}
