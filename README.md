@@ -1,10 +1,12 @@
 # Orthogonal Interactive — Portfolio Site
 
-Vue 3 + Vite の1ページ構成のポートフォリオサイト。ヒーローは Three.js の
-リアルタイム 3D シーン（ポインタ追従・ドラッグ回転）。配色は組織アイコン
-`public/org-icon.png` から採ったダークスレート × シアン。
+Vue 3 + Vite の1ページ構成のポートフォリオサイト。配色は組織アイコン
+`public/org-icon.png` から採ったダークスレート × シアンで、同じアイコンを
+ページ全体の固定背景にウォーターマークとして敷いている。
 
-コンテンツは現状プレースホルダー（Work セクションは "Coming soon" の枠のみ）。
+構成は `About / Services` の2セクションのみ。屋号 `Orthogonal Interactive` を表の名義とし、
+代表者名などの事業者情報は About セクションの定義リストに置いている。
+連絡先（メール・GitHub）はフッタに集約。実績セクションは現時点では設けていない。
 
 ## 開発
 
@@ -20,10 +22,12 @@ npm run preview  # ビルド結果を確認
 
 ```
 index.html                     メタタグ／フォント読み込み
-src/App.vue                    セクションの組み立て
+src/App.vue                    セクションの組み立てと背景
 src/style.css                  カラートークンと共通プリミティブ
-src/components/HeroScene.vue   Three.js シーン（動的 import で遅延ロード）
-src/components/*Section.vue    各セクション
+src/App.vue 内 .backdrop        ロゴのウォーターマーク背景
+src/components/AboutSection.vue    経歴と事業者情報（Name / Principal / Founded / Based in）
+src/components/ServicesSection.vue 提供サービス4種
+src/components/SiteFooter.vue      連絡先（メール・GitHub）
 src/composables/useReveal.js   スクロール連動のフェードイン
 public/org-icon.png            ロゴ／favicon
 ```
@@ -31,8 +35,9 @@ public/org-icon.png            ロゴ／favicon
 編集ポイント:
 
 - コピー文言は各 `*Section.vue` の `<script setup>` 冒頭の配列
-- 色は `src/style.css` の `:root`、3D 側は `HeroScene.vue` の `PALETTE`
-- 連絡先は `ContactSection.vue` の `channels`（メールアドレスは仮）
+- 事業者情報は `AboutSection.vue` の `facts`
+- 色は `src/style.css` の `:root`
+- 連絡先は `SiteFooter.vue` の `links`
 
 ## デプロイ（GitHub Pages / 組織サイト）
 

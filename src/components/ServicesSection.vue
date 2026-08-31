@@ -1,47 +1,48 @@
 <script setup>
-const disciplines = [
+const services = [
   {
     index: '01',
     title: 'Real-time scenes',
-    body: 'Low-poly and photoreal alike — modelling, shading, and lighting tuned to a fixed frame budget rather than an offline render farm.',
-    tags: ['Three.js', 'GLSL', 'glTF'],
+    body: 'Low-poly and photoreal alike — modelling, shading, and lighting tuned to a fixed frame budget rather than an offline render.',
+    tags: ['Unity', 'URP', 'Shader Graph'],
   },
   {
     index: '02',
     title: 'Interaction design',
-    body: 'Camera behaviour, hit testing, and motion that make a 3D scene feel like an instrument instead of a video.',
-    tags: ['Pointer', 'XR', 'Motion'],
+    body: 'Camera work, hit testing, and motion that make a scene feel like an instrument instead of a video.',
+    tags: ['C#', 'Input System', 'XR'],
   },
   {
     index: '03',
-    title: 'Generative systems',
-    body: 'Procedural geometry, simulation, and shader-driven visuals that produce something new on every load.',
-    tags: ['Compute', 'Noise', 'Particles'],
+    title: 'Metaverse & multiplayer',
+    body: 'Shared 3D spaces — avatars, networked state, and the world building that keeps them running with people inside.',
+    tags: ['Netcode', 'Avatars', 'Worlds'],
   },
   {
     index: '04',
     title: 'Pipelines & tooling',
-    body: 'Asset pipelines, budget tracking, and editor tooling so the experience stays fast long after the launch date.',
-    tags: ['Build', 'Profiling', 'CI'],
+    body: 'Asset pipelines, build automation, and editor tooling so a project stays fast and maintainable long after launch.',
+    tags: ['Editor tools', 'Profiling', 'CI'],
   },
 ]
 </script>
 
 <template>
-  <section id="craft" class="section">
+  <section id="services" class="section">
     <div class="shell">
       <div class="section__head reveal">
-        <p class="eyebrow">02 — Craft</p>
-        <h2 class="section__title">What we make</h2>
+        <p class="eyebrow">02 — Services</p>
+        <h2 class="section__title">What I take on</h2>
         <div class="rule" />
         <p class="section__lede">
-          Four disciplines, usually applied together on the same project.
+          Interactive 3D content development, centred on Unity and taken on in
+          four overlapping areas — usually more than one on the same project.
         </p>
       </div>
 
       <div class="cards">
         <article
-          v-for="(item, i) in disciplines"
+          v-for="(item, i) in services"
           :key="item.index"
           class="card reveal"
           :style="{ transitionDelay: `${i * 70}ms` }"

@@ -1,4 +1,4 @@
-/* Palette sampled from the studio mark: a slate-green ground, a faceted grey
+/* Palette sampled from the brand mark: a slate-green ground, a faceted grey
    surface and a cyan glow along the wireframe edges. */
 :root {
   --ink-900: #070c0b;
@@ -98,8 +98,13 @@ img {
 
 .section {
   position: relative;
+  z-index: 1;
   padding: clamp(5rem, 12vh, 8.5rem) 0;
   border-top: 1px solid var(--line-soft);
+}
+
+.section:first-child {
+  border-top: none;
 }
 
 .section__head {
