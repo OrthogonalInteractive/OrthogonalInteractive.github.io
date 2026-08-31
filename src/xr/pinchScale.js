@@ -13,42 +13,78 @@ export function fingerGap(landmarks) {
 }
 
 /**
- * Resizes the model by opening the fingers.
+ * Resizes the model by opening the fingers, but only while they move slowly.
  *
- * Fingers held together are the origin: the object is its own size there, and
- * opening from that grows it. Nothing happens until they have met once, and a
- * hand leaving the frame cancels back to that waiting state — there is no
- * reference to measure against without a hand.
+ * A quick movement is treated the way lifting a mouse is: the size is left
+ * alone, and wherever the fingers come to rest becomes the new grip. That is
+ * what lets an enlarged model be kept while the fingers are snapped shut and
+ * placed again.
  */
 export function createPinchScale({
   closeRatio = 0.3,
   openRatio = 0.45,
   maxRatio = 1.5,
   maxScale = 2.5,
+  maxSpeed = 3,
 } = {}) {
+  const perRatio = (maxScale - 1) / (maxRatio - openRatio)
+
   let armed = false
   let closed = false
+  let slipped = false
+  let scale = 1
+  let lastRatio = null
+  let originRatio = 0
+  let originScale = 1
+
+  function release() {
+    armed = false
+    closed = false
+    slipped = false
+    scale = 1
+    lastRatio = null
+  }
 
   return {
-    update(landmarks) {
+    update(landmarks, seconds) {
       if (!landmarks) {
-        armed = false
-        closed = false
-        return { closed: false, scale: 1 }
+        release()
+        return { closed: false, scale: 1, speed: 0 }
       }
 
       const ratio = fingerGap(landmarks)
+      const speed = lastRatio === null || !seconds ? 0 : Math.abs(ratio - lastRatio) / seconds
+      lastRatio = ratio
+
       // Two thresholds: one would flicker between reset and grow as the
-      // fingers hover at the boundary.
+      // fingers hovered at it.
       closed = closed ? ratio <= openRatio : ratio < closeRatio
-      if (closed) armed = true
 
-      if (!armed || closed) return { closed, scale: 1 }
+      if (speed > maxSpeed) {
+        // Too fast to be a deliberate resize. Hold the size, and re-grip
+        // wherever the fingers settle.
+        slipped = true
+        return { closed, scale, speed }
+      }
 
-      // Growth starts where "apart" starts, so crossing over is seamless.
-      const travel = (ratio - openRatio) / (maxRatio - openRatio)
-      const eased = Math.min(1, Math.max(0, travel))
-      return { closed: false, scale: 1 + (maxScale - 1) * eased }
+      if (!armed) {
+        if (!closed) return { closed, scale: 1, speed }
+        armed = true
+        slipped = false
+        originRatio = ratio
+        originScale = 1
+        scale = 1
+        return { closed, scale, speed }
+      }
+
+      if (slipped) {
+        slipped = false
+        originRatio = ratio
+        originScale = scale
+      }
+
+      scale = Math.min(maxScale, Math.max(1, originScale + (ratio - originRatio) * perRatio))
+      return { closed, scale, speed }
     },
   }
 }

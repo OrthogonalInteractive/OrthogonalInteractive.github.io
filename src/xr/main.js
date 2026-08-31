@@ -62,6 +62,7 @@ async function launch() {
   const overlay = createHandOverlay(document.querySelector('#overlay'))
   const stroke = createStrokeTracker()
   const pinch = createPinchScale({ maxScale: MAX_SCALE })
+  let lastDetectAt = 0
   let handTracker = null
   let handOn = false
   let frame = 0
@@ -348,8 +349,13 @@ async function launch() {
       handSeen = Boolean(landmarks)
       touching = isTouching(point, circle)
 
-      // Opening the fingers resizes the model; closed fingers are its own size.
-      const { closed, scale } = pinch.update(landmarks)
+      // Opening the fingers resizes the model, but only while they move
+      // slowly — the reading needs the real gap between detections, which is
+      // several render frames.
+      const now = performance.now()
+      const sinceDetect = lastDetectAt ? (now - lastDetectAt) / 1000 : 0
+      lastDetectAt = now
+      const { closed, scale, speed } = pinch.update(landmarks, sinceDetect)
       pinched = closed
       cat.setSize(scale)
 
@@ -365,6 +371,7 @@ async function launch() {
         `hand    ${landmarks ? 'yes' : 'no'}`,
         `pinch   ${closed ? 'CLOSED' : 'open'}`,
         `size    ${scale.toFixed(2)}x`,
+        `speed   ${speed.toFixed(1)}/s`,
       ]
     }
 
