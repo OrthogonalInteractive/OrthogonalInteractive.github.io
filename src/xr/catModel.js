@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { createEmergence } from './emerge.js'
 import { fitToMarker } from './fit.js'
 import { createMotion } from './objectMotion.js'
 
@@ -18,6 +19,9 @@ const EMISSIVE_LIT = 1.15
 // Heading on the card, in degrees about the mark's normal. Tuned against the
 // printed artwork; /xr/?debug=1 exposes a control to re-measure it on a device.
 const HEADING = 0
+
+// Seconds for the model to climb out of the card.
+const RISE_SECONDS = 1.4
 
 /** Loads the studio's cat and sits it upright on the tracked mark. */
 export async function loadCatModel() {
@@ -41,6 +45,11 @@ export async function loadCatModel() {
   group.position.z = z
   group.add(heading)
 
+  // Starts buried: the top of the model sits just under the mark's plane, where
+  // the clipping plane hides it entirely.
+  const buried = -box.max.y * scale - 0.02
+  const rise = createEmergence({ from: buried, to: z, duration: RISE_SECONDS })
+
   const materials = []
   model.traverse((child) => {
     if (!child.isMesh) return
@@ -60,6 +69,19 @@ export async function loadCatModel() {
     spin: motion.spin,
     setHighlight: motion.setHighlight,
 
+    /** Play the climb out of the card. */
+    reveal() {
+      rise.start()
+    },
+
+    /** Hides whatever is still below the card, so the model rises out of it. */
+    applyClipping(plane) {
+      materials.forEach((material) => {
+        material.clippingPlanes = [plane]
+        material.needsUpdate = true
+      })
+    },
+
     /** Heading on the card in degrees — the debug control drives this. */
     get heading() {
       return Math.round((heading.rotation.z * 180) / Math.PI)
@@ -70,6 +92,7 @@ export async function loadCatModel() {
 
     update(delta) {
       motion.update(delta)
+      group.position.z = rise.update(delta)
       const intensity =
         EMISSIVE_REST + (EMISSIVE_LIT - EMISSIVE_REST) * motion.highlight
       materials.forEach((material) => {

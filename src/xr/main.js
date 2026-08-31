@@ -5,13 +5,14 @@ import { fingertip, isTouching, screenCircle } from './contact.js'
 import { createHandOverlay, videoRect } from './handOverlay.js'
 import { HAND_ASSETS, HAND_CACHE, createAssetStore, installAssetWorker } from './handAssets.js'
 import { createStrokeTracker } from './stroke.js'
+import { swirlAngle } from './swirl.js'
 import { unsupportedReason } from './support.js'
 import './xr.css'
 
 const TARGET_SRC = '/xr/targets.mind'
 
-// Radians of rotation per pixel of stroke.
-const STROKE_GAIN = 0.007
+// How much of the swept angle the object takes on.
+const SPIN_GAIN = 1
 
 // Hand detection every other frame keeps the interaction responsive without
 // paying for it on every render.
@@ -186,10 +187,16 @@ async function launch() {
     })
   }
   const markerScale = new THREE.Vector3()
-  const cameraUp = new THREE.Vector3()
-  const cameraRight = new THREE.Vector3()
-  const spinAxis = new THREE.Vector3()
+  const markerNormal = new THREE.Vector3()
+  const objectPosition = new THREE.Vector3()
+  const toCamera = new THREE.Vector3()
+  const clipPlane = new THREE.Plane()
   const clock = new THREE.Clock()
+
+  // The model climbs out from under the card, so whatever is still below the
+  // mark's plane must not be drawn.
+  renderer.localClippingEnabled = true
+  cat.applyClipping(clipPlane)
 
   renderer.setAnimationLoop(() => {
     const delta = clock.getDelta()
@@ -205,6 +212,9 @@ async function launch() {
       holder.visible = true
     }
     holder.updateMatrixWorld(true)
+    markerNormal.setFromMatrixColumn(holder.matrixWorld, 2).normalize()
+    objectPosition.setFromMatrixPosition(holder.matrixWorld)
+    clipPlane.setFromNormalAndCoplanarPoint(markerNormal, objectPosition)
 
     if (handTracker && frame++ % DETECT_EVERY === 0) {
       const landmarks = handTracker.detect(mindarThree.video, performance.now())
@@ -219,14 +229,16 @@ async function launch() {
       const point = landmarks ? fingertip(landmarks, rect) : null
       touching = isTouching(point, circle)
 
-      const { dx, dy } = stroke.update({ point, touching })
-      if (dx || dy) {
-        // Trackball: a sideways stroke turns the object about the screen's
-        // vertical, an up-and-down one about its horizontal.
-        cameraUp.setFromMatrixColumn(camera.matrixWorld, 1)
-        cameraRight.setFromMatrixColumn(camera.matrixWorld, 0)
-        spinAxis.copy(cameraUp).multiplyScalar(dx).addScaledVector(cameraRight, -dy)
-        cat.spin(spinAxis, Math.hypot(dx, dy) * STROKE_GAIN)
+      // Rotation is confined to the mark's normal, so only how far the finger
+      // travelled *around* the object counts.
+      const { from, to } = stroke.update({ point, touching })
+      const swept = swirlAngle(from, to, circle)
+      if (swept) {
+        // Screen y points down, so a sweep that reads clockwise turns the
+        // object negatively about a normal facing the lens.
+        toCamera.subVectors(camera.position, objectPosition)
+        const facing = markerNormal.dot(toCamera) > 0 ? -1 : 1
+        cat.spin(markerNormal, swept * facing * SPIN_GAIN)
       }
 
       cat.setHighlight(touching ? 1 : 0)
@@ -237,7 +249,7 @@ async function launch() {
         debugPanel.textContent = [
           `hand    ${landmarks ? 'yes' : 'no'}`,
           `touch   ${touching ? 'YES' : 'no'}`,
-          `stroke  ${dx.toFixed(0)},${dy.toFixed(0)}`,
+          `swirl   ${((swept * 180) / Math.PI).toFixed(0)}deg`,
           `object  ${circle ? `${circle.x.toFixed(0)},${circle.y.toFixed(0)} r${circle.r.toFixed(0)}` : '-'}`,
           `finger  ${point ? `${point.x.toFixed(0)},${point.y.toFixed(0)}` : '-'}`,
         ].join('\n')
@@ -249,9 +261,14 @@ async function launch() {
   })
 
   // Offer hand control only once the mark has actually been registered.
+  let revealed = false
   const originalFound = anchor.onTargetFound
   anchor.onTargetFound = () => {
     originalFound()
+    if (!revealed) {
+      revealed = true
+      cat.reveal()
+    }
     if (hand.hidden) {
       hand.hidden = false
       showCacheState()

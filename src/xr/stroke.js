@@ -11,14 +11,15 @@ export function createStrokeTracker() {
     update({ point, touching }) {
       if (!touching || !point) {
         previous = null
-        return { dx: 0, dy: 0 }
+        return { dx: 0, dy: 0, from: null, to: null }
       }
 
-      const delta = previous
-        ? { dx: point.x - previous.x, dy: point.y - previous.y }
+      const from = previous
+      const delta = from
+        ? { dx: point.x - from.x, dy: point.y - from.y }
         : { dx: 0, dy: 0 }
       previous = point
-      return delta
+      return { ...delta, from, to: point }
     },
   }
 }
