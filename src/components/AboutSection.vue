@@ -5,6 +5,11 @@ const facts = [
   { term: 'Principal', value: 'Jun Tachikawa (jtfrom9)' },
   { term: 'Founded', value: '2026.06' },
   { term: 'Based in', value: 'Japan \u2014 remote' },
+  {
+    term: 'Email',
+    value: 'jtachikawa.work@gmail.com',
+    href: 'mailto:jtachikawa.work@gmail.com',
+  },
 ]
 </script>
 
@@ -33,7 +38,19 @@ const facts = [
         <dl class="facts">
           <div v-for="fact in facts" :key="fact.term" class="facts__row">
             <dt class="facts__term">{{ fact.term }}</dt>
-            <dd class="facts__value">{{ fact.value }}</dd>
+            <dd class="facts__value">
+              <a
+                v-if="fact.href"
+                class="facts__link"
+                :href="fact.href"
+                :target="fact.external ? '_blank' : undefined"
+                :rel="fact.external ? 'noopener' : undefined"
+              >
+                {{ fact.value }}
+                <span class="facts__arrow" aria-hidden="true">↗</span>
+              </a>
+              <template v-else>{{ fact.value }}</template>
+            </dd>
           </div>
         </dl>
       </aside>
@@ -104,6 +121,29 @@ const facts = [
   font-size: 0.92rem;
   color: var(--fg);
   overflow-wrap: anywhere;
+}
+
+.facts__link {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  border-bottom: 1px solid transparent;
+  transition: color 0.25s var(--ease), border-color 0.25s var(--ease);
+}
+
+.facts__link:hover {
+  color: var(--cyan);
+  border-bottom-color: var(--cyan);
+}
+
+.facts__arrow {
+  font-size: 0.7em;
+  color: var(--cyan);
+  transition: transform 0.25s var(--ease);
+}
+
+.facts__link:hover .facts__arrow {
+  transform: translate(2px, -2px);
 }
 
 @media (max-width: 880px) {

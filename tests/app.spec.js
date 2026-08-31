@@ -83,12 +83,18 @@ describe('portfolio page', () => {
     expect(services).not.toContain('GLSL')
   })
 
-  it('collects mail and GitHub in the footer', () => {
+  it('lists mail among the About facts, leaving GitHub to the masthead', () => {
     const wrapper = mount(App)
-    const footer = wrapper.find('footer')
+    const about = wrapper.find('#about')
 
-    expect(footer.find(`a[href="mailto:${EMAIL}"]`).exists()).toBe(true)
-    expect(footer.find(`a[href="${GITHUB}"]`).exists()).toBe(true)
+    expect(about.find(`a[href="mailto:${EMAIL}"]`).exists()).toBe(true)
+    expect(about.find(`a[href="${GITHUB}"]`).exists()).toBe(false)
+    expect(wrapper.find('nav').find(`a[href="${GITHUB}"]`).exists()).toBe(true)
+  })
+
+  it('leaves the footer without links of its own', () => {
+    const wrapper = mount(App)
+    expect(wrapper.find('footer').findAll('a')).toHaveLength(0)
   })
 
   it('opens external links safely', () => {

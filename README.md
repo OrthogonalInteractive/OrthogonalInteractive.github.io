@@ -6,7 +6,8 @@ Vue 3 + Vite の1ページ構成のポートフォリオサイト。配色は組
 
 構成は `About / Services` の2セクションのみ。屋号 `Orthogonal Interactive` を表の名義とし、
 代表者名などの事業者情報は About セクションの定義リストに置いている。
-連絡先（メール・GitHub）はフッタに集約。実績セクションは現時点では設けていない。
+メールアドレスも About の定義リストに含めている（GitHub はヘッダのみ）。
+実績セクションは現時点では設けていない。
 
 ## 開発
 
@@ -25,9 +26,10 @@ index.html                     メタタグ／フォント読み込み
 src/App.vue                    セクションの組み立てと背景
 src/style.css                  カラートークンと共通プリミティブ
 src/App.vue 内 .backdrop        ロゴのウォーターマーク背景
-src/components/AboutSection.vue    経歴と事業者情報（Name / Principal / Founded / Based in）
+src/components/AboutSection.vue    経歴と事業者情報（Name / Principal / Founded /
+                                   Based in / Email）
 src/components/ServicesSection.vue 提供サービス4種
-src/components/SiteFooter.vue      連絡先（メール・GitHub）
+src/components/SiteFooter.vue      屋号と著作権表示のみ
 src/composables/useReveal.js   スクロール連動のフェードイン
 public/org-icon.png            ロゴ／favicon
 ```
@@ -37,7 +39,7 @@ public/org-icon.png            ロゴ／favicon
 - コピー文言は各 `*Section.vue` の `<script setup>` 冒頭の配列
 - 事業者情報は `AboutSection.vue` の `facts`
 - 色は `src/style.css` の `:root`
-- 連絡先は `SiteFooter.vue` の `links`
+- 連絡先も `AboutSection.vue` の `facts`（`href` を持つ行がリンクになる）
 
 ## デプロイ（GitHub Pages / 組織サイト）
 
