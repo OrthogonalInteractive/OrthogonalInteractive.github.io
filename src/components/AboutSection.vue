@@ -2,7 +2,7 @@
 // Business details. Services live in their own section, not in this list.
 const facts = [
   { term: 'Name', value: 'Orthogonal Interactive' },
-  { term: 'Principal', value: 'Jun Tachikawa (jtfrom9)' },
+  { term: 'Principal', value: 'Jun Tachikawa / 立川 純 (jtfrom9)' },
   { term: 'Founded', value: '2026.06' },
   { term: 'Based in', value: 'Japan \u2014 remote' },
   {

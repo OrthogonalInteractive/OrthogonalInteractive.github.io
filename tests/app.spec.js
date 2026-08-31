@@ -54,6 +54,7 @@ describe('portfolio page', () => {
 
     expect(text).toContain('Orthogonal Interactive')
     expect(text).toContain('Jun Tachikawa')
+    expect(text).toContain('立川 純')
     expect(text).toContain('2026.06')
     expect(text).toContain('Japan')
   })

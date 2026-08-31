@@ -75,19 +75,31 @@ useReveal(root)
   );
 }
 
+/* Narrow screens: the copy runs the full width, so a fixed watermark would
+   always sit under text or behind an opaque panel. Park the mark in reserved
+   space at the foot of the document instead, where nothing covers it. */
 @media (max-width: 880px) {
+  .page__main {
+    padding-bottom: min(46vh, 320px);
+  }
+
+  .backdrop {
+    position: absolute;
+    top: auto;
+    bottom: 0;
+    height: min(52vh, 380px);
+  }
+
   .backdrop__mark {
-    right: -18vw;
-    width: min(92vw, 520px);
-    opacity: 0.3;
+    right: 50%;
+    bottom: 3%;
+    width: min(84vw, 420px);
+    transform: translateX(50%);
+    opacity: 0.62;
   }
 
   .backdrop__veil {
-    background: linear-gradient(
-      180deg,
-      rgba(11, 18, 17, 0.72) 0%,
-      rgba(11, 18, 17, 0.62) 100%
-    );
+    background: linear-gradient(180deg, var(--ink-800) 0%, transparent 42%);
   }
 }
 </style>
