@@ -38,11 +38,19 @@
 
       const logEl = document.querySelector('#log')
       const lines = []
-      const live = { pose: '-', image: 'まだ', anchored: false }
+      const live = { pose: '-', image: 'まだ', anchored: false, w: '-', s: '-', cat: '-' }
       const say = (...p) => { lines.push(p.join(' ')); if (lines.length > 8) lines.shift(); paint() }
+      // These two are what the fit is dialled in with, so they stay on screen
+      // rather than scrolling out of the message list.
       const paint = () => {
         logEl.textContent = lines
-          .concat(['', `マーカー: ${live.image}`, `固定: ${live.anchored ? 'YES' : 'no'}`, `camera ${live.pose}`])
+          .concat([
+            '',
+            `w ${live.w}  s ${live.s}  猫 ${live.cat}`,
+            `マーカー: ${live.image}`,
+            `固定: ${live.anchored ? 'YES' : 'no'}`,
+            `camera ${live.pose}`,
+          ])
           .join('\n')
       }
       addEventListener('error', (e) => say('ERROR:', e.message))
@@ -77,8 +85,11 @@
       const sizeFactor = Number(params.get('s')) || 1.1
       target.physicalWidthInMeters = markWidth
       target.moveable = false
+      live.w = `${(markWidth * 1000).toFixed(0)}mm`
+      live.s = String(sizeFactor)
       say('target & model ready |', gltf.animations.length, 'clip')
-      say(`mark ${(markWidth * 1000).toFixed(0)}mm × ${sizeFactor} (?w= ?s= で変更)`)
+      say('?w= マーカー実寸 / ?s= 猫の倍率')
+      paint()
 
       const go = document.querySelector('#go')
       go.disabled = false
@@ -191,7 +202,8 @@
                     gltf.animations.forEach((c) => mixer.clipAction(c).play())
                   }
                   live.anchored = true
-                  say(`固定 | 猫の幅 ${(across * sizeFactor * 1000).toFixed(0)}mm`)
+                  live.cat = `${(across * sizeFactor * 1000).toFixed(0)}mm`
+                  say('固定しました')
                   paint()
                 },
               },
