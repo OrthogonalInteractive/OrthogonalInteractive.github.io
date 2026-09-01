@@ -82,7 +82,7 @@
       const markWidth = Number(params.get('w')) || 0.024
       // At true scale the cat is only as big as the card says, so how much
       // larger than the mark it should read is worth having to hand.
-      const sizeFactor = Number(params.get('s')) || 1.1
+      const sizeFactor = Number(params.get('s')) || 1.5
       target.physicalWidthInMeters = markWidth
       target.moveable = false
       live.w = `${(markWidth * 1000).toFixed(0)}mm`
