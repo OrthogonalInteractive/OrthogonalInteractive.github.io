@@ -163,6 +163,15 @@
                   live.image = `検出 (${detail.name})`
                   if (anchor) return paint()
 
+                  // Report what the engine actually hands over: the size the
+                  // object ends up is only as trustworthy as these numbers.
+                  const num = (v) => (typeof v === 'number' ? v.toFixed(4) : String(v))
+                  say('detail:', Object.keys(detail).join(','))
+                  say(`scaledW=${num(detail.scaledWidth)} scaledH=${num(detail.scaledHeight)} scale=${num(detail.scale)}`)
+                  const dp = detail.position
+                  say(`pos ${num(dp?.x)},${num(dp?.y)},${num(dp?.z)}`,
+                      `| dist ${Math.hypot(dp?.x ?? 0, dp?.y ?? 0, dp?.z ?? 0).toFixed(3)}`)
+
                   // Place once, then let SLAM hold it: the card is an anchor
                   // for the coordinate system, not a marker to keep chasing.
                   const { scene } = XR8.Threejs.xrScene()
@@ -188,9 +197,9 @@
                   const size = new THREE.Vector3()
                   box.getSize(size)
                   // A bit wider than the printed mark, as on the old page.
-                  // With absolute scale the target reports its real width, so
-                  // the cat can be sized against the card rather than guessed.
-                  const across = detail.scaledWidth || markWidth
+                  // detail.geometry.scaledWidth is an aspect ratio, not a size
+                  // — the real width is the one we declared on the target.
+                  const across = markWidth
                   const scale = (across * sizeFactor) / Math.max(size.x, size.z)
                   cat.scale.setScalar(scale)
                   modelHeight = size.y * scale
