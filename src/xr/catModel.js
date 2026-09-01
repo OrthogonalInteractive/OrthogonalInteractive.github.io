@@ -23,8 +23,14 @@ const HEADING = 0
 // Seconds for the model to climb out of the card.
 const RISE_SECONDS = 1.4
 
-/** Loads the studio's cat and sits it upright on the tracked mark. */
-export async function loadCatModel() {
+/**
+ * Loads the studio's cat and sits it upright on the tracked mark.
+ *
+ * `size` is how far it should reach across the mark, as a multiple of the
+ * mark's width — the anchor spans one unit, so the fit is the same whether that
+ * unit came from an image tracker or from a measured world-space anchor.
+ */
+export async function loadCatModel({ size = WIDTH } = {}) {
   const gltf = await new GLTFLoader().loadAsync(MODEL_URL)
   const model = gltf.scene
 
@@ -32,7 +38,7 @@ export async function loadCatModel() {
   model.rotation.x = Math.PI / 2
 
   const box = restBounds(model)
-  const { scale, z, radius } = fitToMarker(box, { width: WIDTH, hover: HOVER })
+  const { scale, z, radius } = fitToMarker(box, { width: size, hover: HOVER })
   model.scale.setScalar(scale)
 
   // Heading sits on its own group: the outer one carries the stroke rotation,

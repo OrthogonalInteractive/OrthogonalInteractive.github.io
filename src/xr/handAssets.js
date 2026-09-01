@@ -7,11 +7,16 @@ export const HAND_ASSETS = [
   '/xr/mediapipe/hand_landmarker.task',
 ]
 
-/** Registers the worker that serves the cached copies back to MediaPipe. */
-export async function installAssetWorker() {
+/**
+ * Registers the worker that serves the cached copies back to MediaPipe.
+ *
+ * Scope decides which pages the worker controls, not which URLs it may answer
+ * for, so each AR page registers its own copy and both reach the same assets.
+ */
+export async function installAssetWorker(url = '/xr/sw.js', scope = '/xr/') {
   if (!('serviceWorker' in navigator)) return false
   try {
-    await navigator.serviceWorker.register('/xr/sw.js', { scope: '/xr/' })
+    await navigator.serviceWorker.register(url, { scope })
     await navigator.serviceWorker.ready
     return true
   } catch {

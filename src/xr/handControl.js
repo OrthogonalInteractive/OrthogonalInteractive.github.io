@@ -31,10 +31,14 @@ export async function loadHandTracker() {
   }
 
   return {
-    /** Landmarks for the first hand in frame, or null when there is none. */
-    detect(video, timestamp) {
-      if (!video.videoWidth) return null
-      const result = landmarker.detectForVideo(video, timestamp)
+    /**
+     * Landmarks for the first hand in frame, or null when there is none.
+     * Takes a video or a canvas: one tracker reads the feed directly, the
+     * other is handed frames the engine has already turned upright.
+     */
+    detect(source, timestamp) {
+      if (!(source.videoWidth || source.width)) return null
+      const result = landmarker.detectForVideo(source, timestamp)
       return result?.landmarks?.[0] ?? null
     },
 

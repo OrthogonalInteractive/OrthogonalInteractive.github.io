@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <link rel="icon" type="image/png" href="/org-icon.png" />
+    <title>Orthogonal Interactive — AR (SLAM)</title>
+    <meta name="description" content="名刺のマークにカメラを向けると、3Dオブジェクトが現れ、その場に残ります。" />
+    <meta name="theme-color" content="#0b1211" />
+    <meta name="robots" content="noindex" />
+    <!-- The engine and its UI helpers are only distributed from 8th Wall's CDN.
+         `slam` is preloaded because world tracking starts the moment the camera
+         does, and fetching it then shows as a stall on the first frames. -->
+    <script
+      src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js"
+      async
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js"
+      async
+      crossorigin="anonymous"
+      data-preload-chunks="slam"
+    ></script>
+  </head>
+  <body>
+    <div id="scene" class="stage"></div>
+    <canvas id="overlay" class="overlay"></canvas>
+    <pre id="debug" class="debug" hidden></pre>
+
+    <div id="intro" class="panel">
+      <img class="panel__mark" src="/org-icon.png" alt="" width="88" height="88" />
+      <h1 class="panel__title">このモデルをカメラに写してください</h1>
+      <!-- Kept on one line: a newline here collapses to a space, which shows
+           as a gap after the Japanese full stop. -->
+      <p class="panel__body">カメラの使用を許可したあと、印刷されたマークを画面に収めてください。その上に3Dオブジェクトが現れ、置いた場所に残ります。</p>
+      <button id="start" class="panel__button" type="button" disabled>
+        カメラを開始
+      </button>
+      <p id="note" class="panel__note">読み込み中…</p>
+    </div>
+
+    <p id="hint" class="hint" hidden>
+      <span class="hint__dot"></span><span id="hint-text">Looking for the mark</span>
+    </p>
+
+    <div id="hand" class="hand" hidden>
+      <button id="hand-enable" class="hand__button" type="button">
+        Enable hand control
+      </button>
+      <p class="hand__note">
+        <span id="hand-note">Adds a 19 MB download</span>
+        <button id="hand-clear" class="hand__clear" type="button" hidden>
+          Clear cache
+        </button>
+      </p>
+    </div>
+
+    <a class="back" href="/">← orthogonalinteractive.github.io</a>
+
+    <script type="module" src="/src/xr2/main.js"></script>
+  </body>
+</html>
