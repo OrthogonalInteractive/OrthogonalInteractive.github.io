@@ -111,6 +111,11 @@ export async function loadCatModel() {
       heading.rotation.z = (degrees * Math.PI) / 180
     },
 
+    /** Whether the material is currently in the transparent path. */
+    get transparent() {
+      return materials.some((m) => m.transparent)
+    },
+
     /** Seconds into the idle loop — the debug readout reports this. */
     get animationTime() {
       return mixer ? mixer.time : 0

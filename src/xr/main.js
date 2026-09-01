@@ -4,6 +4,7 @@ import { loadCatModel } from './catModel.js'
 import { fingertip, isTouching, screenCircle } from './contact.js'
 import { createHandOverlay, videoRect } from './handOverlay.js'
 import { createPinchScale } from './pinchScale.js'
+import { createPoseSmoother } from './poseSmoother.js'
 import { createScreenPinch } from './screenPinch.js'
 import { HAND_ASSETS, HAND_CACHE, createAssetStore, installAssetWorker } from './handAssets.js'
 import { createStrokeTracker } from './stroke.js'
@@ -18,6 +19,10 @@ const SPIN_GAIN = 1
 
 // The largest the model can be made, by either kind of pinch.
 const MAX_SCALE = 2.5
+
+// How quickly the object settles onto a freshly tracked pose, per second.
+// Lower is steadier but lags a moving camera.
+const POSE_SMOOTHING = 9
 
 // Hand detection every other frame keeps the interaction responsive without
 // paying for it on every render.
@@ -209,6 +214,17 @@ async function launch() {
       localStorage.setItem(HEADING_KEY, String(cat.heading))
     })
   }
+  // How far the object's screen position moves between frames. With the camera
+  // still this should be near zero; anything else is the tracker stepping.
+  let jitter = 0
+  let lastCentre = null
+
+  // Frame rate, smoothed — the readout is the only way to see it on a phone.
+  let fps = 0
+  let fpsAt = performance.now()
+  let fpsFrames = 0
+
+  const smoother = createPoseSmoother({ rate: POSE_SMOOTHING })
   const markerScale = new THREE.Vector3()
   const markerNormal = new THREE.Vector3()
   const objectPosition = new THREE.Vector3()
@@ -311,13 +327,21 @@ async function launch() {
   renderer.setAnimationLoop(() => {
     const delta = clock.getDelta()
 
+    fpsFrames += 1
+    const nowMs = performance.now()
+    if (nowMs - fpsAt >= 500) {
+      fps = (fpsFrames * 1000) / (nowMs - fpsAt)
+      fpsAt = nowMs
+      fpsFrames = 0
+    }
+
     // Follow the mark only while the tracker owns it. Once frozen — or once the
     // mark is out of sight — the object simply stays where it was last seen.
     // The tracker keeps running alongside the hand; the pose is only held
     // still while a finger is on the object, where a partly covered mark would
     // otherwise make it jitter.
     if (!touching && anchor.group.visible) {
-      holder.matrix.copy(anchor.group.matrix)
+      holder.matrix.copy(smoother.follow(anchor.group.matrix, delta))
       holder.matrixWorldNeedsUpdate = true
       holder.visible = true
       lostSince = Infinity
@@ -339,6 +363,14 @@ async function launch() {
     circle = holder.visible
       ? screenCircle(cat.group, camera, cat.radius * markerScale.length(), size)
       : null
+
+    if (circle) {
+      if (lastCentre) {
+        const moved = Math.hypot(circle.x - lastCentre.x, circle.y - lastCentre.y)
+        jitter = jitter * 0.9 + moved * 0.1
+      }
+      lastCentre = { x: circle.x, y: circle.y }
+    }
 
     if (handOn && frame++ % DETECT_EVERY === 0) {
       const landmarks = handTracker.detect(mindarThree.video, performance.now())
@@ -386,6 +418,9 @@ async function launch() {
         `touch   ${touching ? 'YES' : 'no'}`,
         `turn    ${cat.turn}deg`,
         `anim    ${cat.animationTime.toFixed(1)}s`,
+        `fps     ${fps.toFixed(0)}`,
+        `jitter  ${jitter.toFixed(2)}px/f`,
+        `alpha   ${cat.transparent ? 'ON' : 'off'}`,
         `fit     r=${cat.radius.toFixed(2)} s=${cat.fitScale.toFixed(3)}`,
         `object  ${circle ? `${circle.x.toFixed(0)},${circle.y.toFixed(0)} r${circle.r.toFixed(0)}` : '-'}`,
       ].join('\n')
@@ -405,7 +440,11 @@ async function launch() {
     hintText.textContent = 'Mark found'
 
     // Rise again only if it had actually gone; a stutter should not restart it.
-    if (cat.gone) cat.reveal()
+    if (cat.gone) {
+      // Take the new pose straight away rather than sliding in from the old.
+      smoother.reset()
+      cat.reveal()
+    }
 
     // Offer hand control only once the mark has actually been registered.
     if (hand.hidden) {
