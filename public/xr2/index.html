@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>SLAM spike — Orthogonal Interactive</title>
+    <title>Orthogonal Interactive — AR (SLAM)</title>
     <meta name="robots" content="noindex" />
     <style>
       html, body { margin: 0; width: 100%; height: 100%; background: #0b1211; color: #dbe7e6;
@@ -17,8 +17,6 @@
             font: inherit; font-size: .9rem; }
       #go[hidden] { display: none; }
     </style>
-    <!-- XRExtras carries the permission prompts, the loading screen and the
-         runtime error display. Without it a failure is completely silent. -->
     <script src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js" async crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js" async crossorigin="anonymous" data-preload-chunks="slam"></script>
     <script type="importmap">
@@ -34,148 +32,159 @@
     <button id="go" type="button" disabled>カメラを開始</button>
 
     <script type="module">
-      // XR8.Threejs reaches for window.THREE rather than taking an import, so
-      // the module has to be published globally before the pipeline is built.
       import * as THREE from 'three'
-      window.THREE = THREE
+      import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+      window.THREE = THREE   // XR8.Threejs reads the global rather than an import
 
       const logEl = document.querySelector('#log')
       const lines = []
-      const say = (...p) => {
-        lines.push(p.join(' '))
-        if (lines.length > 10) lines.shift()
-        logEl.textContent = lines.join('\n')
+      const live = { pose: '-', image: 'まだ', anchored: false }
+      const say = (...p) => { lines.push(p.join(' ')); if (lines.length > 8) lines.shift(); paint() }
+      const paint = () => {
+        logEl.textContent = lines
+          .concat(['', `マーカー: ${live.image}`, `固定: ${live.anchored ? 'YES' : 'no'}`, `camera ${live.pose}`])
+          .join('\n')
       }
-      // On a phone there is no console, so nothing may fail quietly.
       addEventListener('error', (e) => say('ERROR:', e.message))
       addEventListener('unhandledrejection', (e) => say('REJECTED:', e.reason?.message ?? e.reason))
 
-      const waitFor = (name, event) =>
-        new Promise((resolve) => {
-          if (window[name]) return resolve(window[name])
-          window.addEventListener(event, () => resolve(window[name]), { once: true })
-        })
+      const waitFor = (name, event) => new Promise((resolve) => {
+        if (window[name]) return resolve(window[name])
+        addEventListener(event, () => resolve(window[name]), { once: true })
+      })
 
       const t0 = performance.now()
       const [XR8, XRExtras] = await Promise.all([
-        waitFor('XR8', 'xrloaded'),
-        waitFor('XRExtras', 'xrextrasloaded'),
+        waitFor('XR8', 'xrloaded'), waitFor('XRExtras', 'xrextrasloaded'),
       ])
-      say(`engine + extras: ${((performance.now() - t0) / 1000).toFixed(1)}s`)
-      say('three:', THREE.REVISION, '| window.THREE:', typeof window.THREE)
-
+      say(`engine: ${((performance.now() - t0) / 1000).toFixed(1)}s | three ${THREE.REVISION}`)
       const est = XR8.XrDevice.deviceEstimate()
-      say(`${est.os} ${est.osVersion} / ${est.browser?.name} ${est.browser?.majorVersion}`)
-      say('compatible:', XR8.XrDevice.isDeviceBrowserCompatible(),
-          JSON.stringify(XR8.XrDevice.incompatibleReasons?.() ?? []))
-      say('needs permission:', JSON.stringify(XR8.requiredPermissions?.() ?? '?'))
+      say(`${est.os} ${est.osVersion} / ${est.browser?.name}`,
+          '| compatible:', XR8.XrDevice.isDeviceBrowserCompatible())
+
+      const [target, gltf] = await Promise.all([
+        fetch('/xr2/card-target.json').then((r) => r.json()),
+        new GLTFLoader().loadAsync('/xr/cat.glb'),
+      ])
+      say('target & model ready:', gltf.animations.length, 'clip(s)')
 
       const go = document.querySelector('#go')
       go.disabled = false
-      say('', 'ボタンを押すとカメラ許可を求めます。')
+      say('', '名刺のマークにカメラを向けてください。')
 
-      // Loaded after the button is live, so a model problem cannot lock it.
-      let gltf = null
-      import('three/addons/loaders/GLTFLoader.js')
-        .then(({ GLTFLoader }) => new GLTFLoader().loadAsync('/xr/cat.glb'))
-        .then((g) => { gltf = g; say('model ready:', g.animations.length, 'clip(s)') })
-        .catch((e) => say('MODEL FAILED:', e?.message ?? e))
-
-      go.addEventListener('click', async () => {
+      go.addEventListener('click', () => {
         go.hidden = true
-        try {
-          const canvas = document.createElement('canvas')
-          document.querySelector('#scene').appendChild(canvas)
+        const canvas = document.createElement('canvas')
+        document.querySelector('#scene').appendChild(canvas)
 
-          let cat = null
-          let mixer = null
-          const clock = new THREE.Clock()
-          const status = { pose: 'waiting' }
+        const clock = new THREE.Clock()
+        let mixer = null
+        let anchor = null      // holds the cat, placed once in world space
+        let rise = 0           // 0..1 climb out of the card
+        let modelHeight = 1
+        const clipPlane = new THREE.Plane()
 
-          XR8.XrController.configure({ disableWorldTracking: false })
-          XR8.addCameraPipelineModules([
-            XR8.GlTextureRenderer.pipelineModule(),
-            XR8.Threejs.pipelineModule(),
-            XR8.XrController.pipelineModule(),
-            // Without this the camera feed is drawn into whatever size the
-            // canvas happened to have, which on a phone is a strip at the top.
-            XRExtras.FullWindowCanvas.pipelineModule(),
-            XRExtras.AlmostThere.pipelineModule(),   // unsupported-device page
-            XRExtras.Loading.pipelineModule(),       // camera permission + spinner
-            XRExtras.RuntimeError.pipelineModule(),  // shows engine errors on screen
-            XRExtras.PauseOnHidden.pipelineModule(), // release the camera when backgrounded
-            {
-              name: 'spike',
-              onStart: () => {
-                const { scene, camera } = XR8.Threejs.xrScene()
-                scene.add(new THREE.AmbientLight(0xbcd6de, 1.4))
-                const key = new THREE.DirectionalLight(0xdff0f6, 2)
-                key.position.set(1, 3, 2)
-                scene.add(key)
-                camera.position.set(0, 1.4, 0)
-                say('pipeline started')
+        XR8.XrController.configure({
+          disableWorldTracking: false,
+          imageTargetData: [target],
+        })
 
-                if (!gltf) return say('model not ready yet — tap once it loads')
-                place(scene)
-              },
-              onException: (e) => say('EXCEPTION:', e?.message ?? e),
-              onUpdate: ({ processCpuResult }) => {
-                mixer?.update(clock.getDelta())
-                const r = processCpuResult.reality
-                if (!r) return
-                const p = r.position
-                status.pose = `${p.x.toFixed(2)},${p.y.toFixed(2)},${p.z.toFixed(2)} ${r.trackingStatus}${r.trackingReason ? '/' + r.trackingReason : ''}`
-              },
+        XR8.addCameraPipelineModules([
+          XR8.GlTextureRenderer.pipelineModule(),
+          XR8.Threejs.pipelineModule(),
+          XR8.XrController.pipelineModule(),
+          XRExtras.FullWindowCanvas.pipelineModule(),
+          XRExtras.AlmostThere.pipelineModule(),
+          XRExtras.Loading.pipelineModule(),
+          XRExtras.RuntimeError.pipelineModule(),
+          XRExtras.PauseOnHidden.pipelineModule(),
+          {
+            name: 'orthogonal',
+            onStart: () => {
+              const { scene, renderer } = XR8.Threejs.xrScene()
+              scene.add(new THREE.AmbientLight(0xbcd6de, 1.3))
+              const key = new THREE.DirectionalLight(0xdff0f6, 2)
+              key.position.set(1, 3, 2)
+              scene.add(key)
+              renderer.localClippingEnabled = true
+              say('パイプライン開始')
             },
-          ])
+            onException: (e) => say('EXCEPTION:', e?.message ?? e),
+            onUpdate: ({ processCpuResult }) => {
+              const delta = clock.getDelta()
+              mixer?.update(delta)
+              if (anchor && rise < 1) {
+                rise = Math.min(1, rise + delta / 1.4)
+                const eased = 1 - (1 - rise) ** 3
+                anchor.children[0].position.y = (eased - 1) * modelHeight
+                // Cut at the card so the cat climbs out of the print.
+                anchor.updateMatrixWorld(true)
+                const normal = new THREE.Vector3().setFromMatrixColumn(anchor.matrixWorld, 1).normalize()
+                const origin = new THREE.Vector3().setFromMatrixPosition(anchor.matrixWorld)
+                clipPlane.setFromNormalAndCoplanarPoint(normal, origin)
+              }
+              const r = processCpuResult.reality
+              if (!r) return
+              const p = r.position
+              live.pose = `${p.x.toFixed(2)},${p.y.toFixed(2)},${p.z.toFixed(2)} ${r.trackingStatus}`
+              paint()
+            },
+            listeners: [
+              { event: 'reality.imageloading', process: () => say('マーカー読み込み中…') },
+              { event: 'reality.imagescanning', process: () => { live.image = '探索中'; paint() } },
+              {
+                event: 'reality.imagefound',
+                process: ({ detail }) => {
+                  live.image = `検出 (${detail.name})`
+                  if (anchor) return paint()
 
-          function place(scene) {
-            cat = gltf.scene
-            const box = new THREE.Box3()
-            const tmp = new THREE.Box3()
-            cat.traverse((c) => {
-              if (!c.isMesh) return
-              if (!c.geometry.boundingBox) c.geometry.computeBoundingBox()
-              tmp.copy(c.geometry.boundingBox).applyMatrix4(c.matrixWorld)
-              box.union(tmp)
-              c.frustumCulled = false
-              c.material.emissiveMap = c.material.map
-              c.material.emissive = new THREE.Color(0xffffff)
-              c.material.emissiveIntensity = 0.7
-            })
-            const size = new THREE.Vector3()
-            box.getSize(size)
-            cat.scale.setScalar(0.5 / Math.max(size.x, size.z))
-            cat.position.set(0, 0, -1.5)
-            scene.add(cat)
-            if (gltf.animations.length) {
-              mixer = new THREE.AnimationMixer(cat)
-              gltf.animations.forEach((c) => mixer.clipAction(c).play())
-            }
-            say('猫を1.5m先に配置。周りを歩いてください。')
-          }
+                  // Place once, then let SLAM hold it: the card is an anchor
+                  // for the coordinate system, not a marker to keep chasing.
+                  const { scene } = XR8.Threejs.xrScene()
+                  anchor = new THREE.Group()
+                  anchor.position.copy(detail.position)
+                  anchor.quaternion.copy(detail.rotation)
+                  scene.add(anchor)
 
-          canvas.addEventListener('pointerdown', (e) => {
-            if (!cat && gltf) place(XR8.Threejs.xrScene().scene)
-            if (!cat) return
-            const hits = XR8.XrController.hitTest(
-              e.clientX / innerWidth, e.clientY / innerHeight, ['FEATURE_POINT'])
-            if (!hits?.length) return say('その位置に面が見つかりません')
-            const { x, y, z } = hits[0].position
-            cat.position.set(x, y, z)
-            say('設置:', `${x.toFixed(2)},${y.toFixed(2)},${z.toFixed(2)}`)
-          })
+                  const cat = gltf.scene
+                  const box = new THREE.Box3()
+                  const tmp = new THREE.Box3()
+                  cat.traverse((c) => {
+                    if (!c.isMesh) return
+                    if (!c.geometry.boundingBox) c.geometry.computeBoundingBox()
+                    tmp.copy(c.geometry.boundingBox).applyMatrix4(c.matrixWorld)
+                    box.union(tmp)
+                    c.frustumCulled = false
+                    c.material.emissiveMap = c.material.map
+                    c.material.emissive = new THREE.Color(0xffffff)
+                    c.material.emissiveIntensity = 0.7
+                    c.material.clippingPlanes = [clipPlane]
+                  })
+                  const size = new THREE.Vector3()
+                  box.getSize(size)
+                  // A bit wider than the printed mark, as on the old page.
+                  const scale = (detail.scaledWidth ?? 1) * 1.1 / Math.max(size.x, size.z)
+                  cat.scale.setScalar(scale)
+                  modelHeight = size.y * scale
+                  cat.position.y = -modelHeight
+                  anchor.add(cat)
 
-          setInterval(() => {
-            logEl.textContent = lines.concat(['', `camera ${status.pose}`]).join('\n')
-          }, 300)
+                  if (gltf.animations.length) {
+                    mixer = new THREE.AnimationMixer(cat)
+                    gltf.animations.forEach((c) => mixer.clipAction(c).play())
+                  }
+                  live.anchored = true
+                  say('固定しました。名刺を隠しても残ります。')
+                  paint()
+                },
+              },
+              { event: 'reality.imagelost', process: () => { live.image = 'ロスト（固定は継続）'; paint() } },
+            ],
+          },
+        ])
 
-          say('XR8.run() …')
-          XR8.run({ canvas })
-        } catch (error) {
-          go.hidden = false
-          say('START FAILED:', error?.message ?? error)
-        }
+        say('XR8.run() …')
+        XR8.run({ canvas })
       })
     </script>
   </body>
