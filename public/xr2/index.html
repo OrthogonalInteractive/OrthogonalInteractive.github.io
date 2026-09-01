@@ -6,91 +6,129 @@
     <title>SLAM spike — Orthogonal Interactive</title>
     <meta name="robots" content="noindex" />
     <style>
-      html, body { margin: 0; background: #0b1211; color: #dbe7e6; font-family: ui-monospace, Menlo, monospace; overflow: hidden; }
+      html, body { margin: 0; background: #0b1211; color: #dbe7e6;
+                   font-family: ui-monospace, Menlo, monospace; overflow: hidden; touch-action: none; }
       #scene { position: fixed; inset: 0; }
-      #log { position: fixed; inset: 0 auto auto 0; margin: 0; padding: .7rem .9rem; max-width: 100%; z-index: 10;
-             background: rgba(11,18,17,.8); font-size: .68rem; line-height: 1.65; white-space: pre-wrap; }
+      #log { position: fixed; top: 0; left: 0; margin: 0; padding: .6rem .8rem; z-index: 10; max-width: 100%;
+             background: rgba(11,18,17,.78); font-size: .64rem; line-height: 1.6; white-space: pre-wrap; }
       #go { position: fixed; left: 50%; bottom: 2rem; transform: translateX(-50%); z-index: 10;
             padding: .85rem 1.6rem; border: none; border-radius: 999px; background: #8fd3e8; color: #070c0b;
             font: inherit; font-size: .9rem; }
+      #go[hidden] { display: none; }
     </style>
-    <!-- Loaded from the CDN so the spike costs the repository nothing. -->
     <script src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js" async crossorigin="anonymous" data-preload-chunks="slam"></script>
+    <script type="importmap">
+      { "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"
+      } }
+    </script>
   </head>
   <body>
     <div id="scene"></div>
-    <pre id="log">loading engine…</pre>
+    <pre id="log">loading…</pre>
     <button id="go" type="button" disabled>カメラを開始</button>
 
     <script type="module">
-      const log = document.querySelector('#log')
-      const lines = []
-      const say = (...parts) => { lines.push(parts.join(' ')); log.textContent = lines.join('\n') }
+      import * as THREE from 'three'
+      import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
-      const XR8Ready = new Promise((resolve) => {
+      const logEl = document.querySelector('#log')
+      const lines = []
+      const say = (...p) => { lines.push(p.join(' ')); if (lines.length > 9) lines.shift(); logEl.textContent = lines.join('\n') }
+      const status = { pose: '-', placed: false }
+
+      const XR8 = await new Promise((resolve) => {
         if (window.XR8) return resolve(window.XR8)
         window.addEventListener('xrloaded', () => resolve(window.XR8), { once: true })
       })
 
-      const started = performance.now()
-      const XR8 = await XR8Ready
-      say('engine loaded in', ((performance.now() - started) / 1000).toFixed(1) + 's')
-      say('XR8 keys:', Object.keys(XR8).slice(0, 12).join(','))
+      const est = XR8.XrDevice.deviceEstimate()
+      say(`${est.os} ${est.osVersion} / ${est.browser?.name} ${est.browser?.majorVersion}`)
+      say('compatible:', XR8.XrDevice.isDeviceBrowserCompatible(),
+          '| reasons', JSON.stringify(XR8.XrDevice.incompatibleReasons?.() ?? []))
 
-      // The only question this spike has to answer first: does it run at all
-      // without the retired hosted service and its app key?
-      try {
-        say('compatible:', XR8.XrDevice.isDeviceBrowserCompatible())
-        const est = XR8.XrDevice.deviceEstimate()
-        say('device:', `${est.os} ${est.osVersion} ${est.model} ${est.browser?.name} ${est.browser?.majorVersion}`)
-        const reasons = XR8.XrDevice.incompatibleReasons?.() ?? []
-        say('incompatible reasons:', JSON.stringify(reasons))
-      } catch (error) {
-        say('device check threw:', error?.message ?? error)
-      }
+      // The cat already lives at /xr/; borrowing it leaves that page untouched.
+      const gltf = await new GLTFLoader().loadAsync('/xr/cat.glb')
+      say('model loaded:', gltf.animations.length, 'clip(s)')
 
       const go = document.querySelector('#go')
       go.disabled = false
-      say('')
-      say('カメラを開始したあと、スマホをゆっくり左右に動かしてください。')
-      say('pos の数値が動けば SLAM が効いています。')
-      go.addEventListener('click', async () => {
-        go.disabled = true
-        say('--- starting ---')
-        try {
-          XR8.XrController.configure({ disableWorldTracking: false })
-          say('XrController configured (world tracking on)')
 
-          XR8.addCameraPipelineModules([
-            XR8.GlTextureRenderer.pipelineModule(),
-            XR8.XrController.pipelineModule(),
-            {
-              name: 'spike',
-              onStart: () => say('pipeline started'),
-              onException: (e) => say('EXCEPTION:', e?.message ?? e),
-              onUpdate: ({ processCpuResult }) => {
-                const r = processCpuResult.reality
-                if (!r) return
-                window.__poses = (window.__poses || 0) + 1
-                // Report sparsely: the point is to see whether the pose moves
-                // as the phone moves, and what the tracker says about itself.
-                if (window.__poses % 30 !== 1 || window.__poses > 900) return
-                const p = r.position
-                say(`#${window.__poses}`,
-                    `pos ${p.x.toFixed(2)},${p.y.toFixed(2)},${p.z.toFixed(2)}`,
-                    `| ${r.trackingStatus}${r.trackingReason ? '/' + r.trackingReason : ''}`)
-              },
+      go.addEventListener('click', () => {
+        go.hidden = true
+        const canvas = document.createElement('canvas')
+        canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%'
+        document.querySelector('#scene').appendChild(canvas)
+
+        let cat = null
+        let mixer = null
+        const clock = new THREE.Clock()
+
+        XR8.XrController.configure({ disableWorldTracking: false })
+        XR8.addCameraPipelineModules([
+          XR8.GlTextureRenderer.pipelineModule(),
+          XR8.Threejs.pipelineModule(),
+          XR8.XrController.pipelineModule(),
+          {
+            name: 'spike',
+            onStart: () => {
+              const { scene, camera } = XR8.Threejs.xrScene()
+              scene.add(new THREE.AmbientLight(0xbcd6de, 1.4))
+              const key = new THREE.DirectionalLight(0xdff0f6, 2)
+              key.position.set(1, 3, 2)
+              scene.add(key)
+
+              cat = gltf.scene
+              const box = new THREE.Box3()
+              const tmp = new THREE.Box3()
+              cat.traverse((c) => {
+                if (!c.isMesh) return
+                if (!c.geometry.boundingBox) c.geometry.computeBoundingBox()
+                tmp.copy(c.geometry.boundingBox).applyMatrix4(c.matrixWorld)
+                box.union(tmp)
+                c.frustumCulled = false
+                c.material.emissiveMap = c.material.map
+                c.material.emissive = new THREE.Color(0xffffff)
+                c.material.emissiveIntensity = 0.7
+              })
+              const size = new THREE.Vector3()
+              box.getSize(size)
+              // Knee-high, so walking around it is a fair test.
+              cat.scale.setScalar(0.5 / Math.max(size.x, size.z))
+              cat.position.set(0, 0, -1.5)
+              scene.add(cat)
+
+              if (gltf.animations.length) {
+                mixer = new THREE.AnimationMixer(cat)
+                gltf.animations.forEach((c) => mixer.clipAction(c).play())
+              }
+              camera.position.set(0, 1.4, 0)
+              say('placed 1.5m ahead — walk around it')
             },
-          ])
+            onException: (e) => say('EXCEPTION:', e?.message ?? e),
+            onUpdate: ({ processCpuResult }) => {
+              mixer?.update(clock.getDelta())
+              const r = processCpuResult.reality
+              if (!r) return
+              const p = r.position
+              status.pose = `${p.x.toFixed(2)},${p.y.toFixed(2)},${p.z.toFixed(2)} ${r.trackingStatus}${r.trackingReason ? '/' + r.trackingReason : ''}`
+            },
+          },
+        ])
 
-          const canvas = document.createElement('canvas')
-          canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%'
-          document.querySelector('#scene').appendChild(canvas)
-          XR8.run({ canvas })
-          say('XR8.run() called')
-        } catch (error) {
-          say('START FAILED:', error?.message ?? error)
-        }
+        // Tap to drop the cat on a real surface.
+        canvas.addEventListener('pointerdown', (e) => {
+          const hits = XR8.XrController.hitTest(e.clientX / window.innerWidth, e.clientY / window.innerHeight, ['FEATURE_POINT'])
+          if (!hits?.length || !cat) return say('no surface under that tap')
+          const { x, y, z } = hits[0].position
+          cat.position.set(x, y, z)
+          status.placed = true
+          say('dropped at', `${x.toFixed(2)},${y.toFixed(2)},${z.toFixed(2)}`)
+        })
+
+        setInterval(() => { logEl.textContent = lines.concat(['', `camera ${status.pose}`]).join('\n') }, 300)
+        XR8.run({ canvas })
       })
     </script>
   </body>
