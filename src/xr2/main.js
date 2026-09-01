@@ -58,6 +58,13 @@ function setNote(message, isError = false) {
   note.classList.toggle('is-error', isError)
 }
 
+// Without these a failure anywhere in setup shows only as a button that does
+// nothing at all.
+window.addEventListener('error', (event) => setNote(`エラー: ${event.message}`, true))
+window.addEventListener('unhandledrejection', (event) =>
+  setNote(`エラー: ${event.reason?.message ?? event.reason}`, true),
+)
+
 /** The engine and its helpers arrive as async scripts, each with its own event. */
 function waitFor(name, event) {
   return new Promise((resolve) => {
@@ -66,8 +73,7 @@ function waitFor(name, event) {
   })
 }
 
-async function launch() {
-  startButton.disabled = true
+async function prepare() {
   setNote('エンジンを読み込んでいます…')
 
   const [XR8] = await Promise.all([
@@ -274,183 +280,6 @@ async function launch() {
 
   // --- pipeline -----------------------------------------------------------
 
-  XR8.XrController.configure({
-    disableWorldTracking: false,
-    // Without this the world has no size, and a mark measured in millimetres
-    // cannot be told apart from one measured in metres.
-    scale: 'absolute',
-    imageTargetData: [target],
-  })
-
-  XR8.addCameraPipelineModules([
-    XR8.GlTextureRenderer.pipelineModule(),
-    XR8.Threejs.pipelineModule(),
-    XR8.XrController.pipelineModule(),
-    XRExtras.FullWindowCanvas.pipelineModule(),
-    XRExtras.AlmostThere.pipelineModule(),
-    XRExtras.RuntimeError.pipelineModule(),
-    XRExtras.PauseOnHidden.pipelineModule(),
-    {
-      name: 'orthogonal',
-
-      onStart: () => {
-        const { scene, renderer } = XR8.Threejs.xrScene()
-        scene.add(new THREE.AmbientLight(0xbcd6de, 1.1))
-        const key = new THREE.DirectionalLight(0xdff0f6, 2.2)
-        key.position.set(0.6, 1.4, 0.8)
-        scene.add(key)
-        const rim = new THREE.PointLight(0x8fd3e8, 3, 6)
-        rim.position.set(-0.8, 1, -0.4)
-        scene.add(rim)
-
-        // The model climbs out from under the card, so whatever is still below
-        // the mark's plane must not be drawn.
-        renderer.localClippingEnabled = true
-        cat.applyClipping(clipPlane)
-
-        intro.classList.add('is-gone')
-        hint.hidden = false
-        if (debugging) debugPanel.hidden = false
-      },
-
-      onCameraStatusChange: ({ status }) => {
-        if (status === 'failed') {
-          intro.classList.remove('is-gone')
-          startButton.disabled = false
-          setNote('カメラを開始できませんでした。ブラウザの設定で許可してから、もう一度お試しください。', true)
-        }
-      },
-
-      onVideoSizeChange: ({ orientation }) => {
-        uiOrientation = orientation
-        overlay.resize()
-      },
-
-      onException: (error) => setNote(`エラー: ${error?.message ?? error}`, true),
-
-      onUpdate: ({ processGpuResult }) => {
-        const delta = clock.getDelta()
-
-        fpsFrames += 1
-        const now = performance.now()
-        if (now - fpsAt >= 500) {
-          fps = (fpsFrames * 1000) / (now - fpsAt)
-          fpsAt = now
-          fpsFrames = 0
-        }
-
-        if (!anchor) return
-        const { camera } = XR8.Threejs.xrScene()
-
-        // The card's plane, in world space: the clip that hides the buried part
-        // of the model, and the axis every stroke turns it about.
-        anchor.updateMatrixWorld(true)
-        markNormal.setFromMatrixColumn(anchor.matrixWorld, 1).normalize()
-        objectPosition.setFromMatrixPosition(anchor.matrixWorld)
-        clipPlane.setFromNormalAndCoplanarPoint(markNormal, objectPosition)
-
-        cat.group.updateMatrixWorld(true)
-        worldScale.setFromMatrixColumn(cat.group.matrixWorld, 0)
-        circle = screenCircle(cat.group, camera, cat.radius * worldScale.length(), {
-          width: window.innerWidth,
-          height: window.innerHeight,
-        })
-
-        if (handOn && handTracker && frames++ % DETECT_EVERY === 0) {
-          const pixels = processGpuResult?.camerapixelarray
-          if (pixels && cameraFrame.update(pixels, frameTurn())) {
-            const landmarks = handTracker.detect(cameraFrame.canvas, performance.now())
-            // Contact is judged on screen: the landmarks carry no depth that
-            // could place the finger in front of or behind the object.
-            const rect = coverRect(cameraFrame.shape, {
-              width: window.innerWidth,
-              height: window.innerHeight,
-            })
-            const point = landmarks ? fingertip(landmarks, rect) : null
-            handSeen = Boolean(landmarks)
-            touching = isTouching(point, circle)
-
-            const sinceDetect = lastDetectAt ? (now - lastDetectAt) / 1000 : 0
-            lastDetectAt = now
-            const { closed, scale, speed } = pinch.update(landmarks, sinceDetect)
-            pinched = closed
-            cat.setSize(scale)
-
-            const { from, to } = stroke.update({ point, touching })
-            spinBy(swirlAngle(from, to, circle))
-
-            overlay.draw(landmarks, rect, { touching, pinched })
-            hint.classList.toggle('is-found', touching)
-            handReadout = [
-              `hand    ${landmarks ? 'yes' : 'no'}`,
-              `pinch   ${closed ? 'CLOSED' : 'open'}`,
-              `size    ${scale.toFixed(2)}x`,
-              `speed   ${speed.toFixed(1)}/s`,
-              `frame   ${cameraFrame.shape.width}x${cameraFrame.shape.height} @${frameTurn()}deg`,
-            ]
-          }
-        }
-
-        cat.setHighlight(touching || swiping || screenPinching ? 1 : 0)
-        cat.update(delta)
-
-        if (debugging) {
-          debugPanel.textContent = [
-            ...handReadout,
-            `mark    ${(span * 1000).toFixed(1)}u (declared ${(markWidth * 1000).toFixed(0)})`,
-            `size    ${modelSize}x mark`,
-            `swipe   ${swiping ? 'YES' : screenPinching ? 'PINCH' : 'no'}`,
-            `touch   ${touching ? 'YES' : 'no'}`,
-            `turn    ${cat.turn}deg`,
-            `fps     ${fps.toFixed(0)}`,
-            `object  ${circle ? `${circle.x.toFixed(0)},${circle.y.toFixed(0)} r${circle.r.toFixed(0)}` : '-'}`,
-          ].join('\n')
-        }
-      },
-
-      listeners: [
-        {
-          event: 'reality.imagescanning',
-          process: () => {
-            if (!anchor) hintText.textContent = 'Looking for the mark'
-          },
-        },
-        {
-          event: 'reality.imagefound',
-          process: ({ detail }) => {
-            // Placed once and left alone. SLAM holds the pose from here, so a
-            // second sighting must not move what is already standing there.
-            if (anchor) return
-
-            const { scene } = XR8.Threejs.xrScene()
-            span = markerSpan(detail, markWidth)
-
-            anchor = new THREE.Group()
-            anchor.position.copy(detail.position)
-            anchor.quaternion.copy(detail.rotation)
-            // One anchor unit is one mark width, which is what the model was
-            // fitted against — the same footing a MindAR anchor gives it.
-            anchor.scale.setScalar(span)
-
-            // The model stands on a mark whose normal is +Z; an 8th Wall image
-            // target lies in the XZ plane, so the assembly is laid back.
-            const frame = new THREE.Group()
-            frame.rotation.x = -Math.PI / 2
-            frame.add(cat.group)
-            anchor.add(frame)
-            scene.add(anchor)
-
-            cat.reveal()
-            hint.classList.add('is-found')
-            hintText.textContent = 'Swipe it to turn'
-            hand.hidden = false
-            showCacheState()
-          },
-        },
-      ],
-    },
-  ])
-
   window.addEventListener('pagehide', () => {
     handTracker?.close()
     overlay.dispose()
@@ -458,16 +287,206 @@ async function launch() {
     XR8.stop()
   })
 
-  setNote('カメラを起動しています…')
-  XR8.run({ canvas })
-}
+  // Everything that can be awaited is done before the button goes live, so
+  // the tap that starts the camera reaches XR8.run() in the same turn. An
+  // await in between spends the gesture, and the prompt never comes up.
+  startButton.disabled = false
+  setNote('カメラ映像は端末内で処理され、送信されません。')
+  startButton.addEventListener(
+    'click',
+    () => {
+      startButton.disabled = true
+      setNote('カメラを起動しています…')
 
+      XR8.XrController.configure({
+        disableWorldTracking: false,
+        // Without this the world has no size, and a mark measured in millimetres
+        // cannot be told apart from one measured in metres.
+        scale: 'absolute',
+        imageTargetData: [target],
+      })
+
+      XR8.addCameraPipelineModules([
+        XR8.GlTextureRenderer.pipelineModule(),
+        XR8.Threejs.pipelineModule(),
+        XR8.XrController.pipelineModule(),
+        XRExtras.FullWindowCanvas.pipelineModule(),
+        XRExtras.AlmostThere.pipelineModule(),
+        XRExtras.Loading.pipelineModule(),
+        XRExtras.RuntimeError.pipelineModule(),
+        XRExtras.PauseOnHidden.pipelineModule(),
+        {
+          name: 'orthogonal',
+
+          onStart: () => {
+            const { scene, renderer } = XR8.Threejs.xrScene()
+            scene.add(new THREE.AmbientLight(0xbcd6de, 1.1))
+            const key = new THREE.DirectionalLight(0xdff0f6, 2.2)
+            key.position.set(0.6, 1.4, 0.8)
+            scene.add(key)
+            const rim = new THREE.PointLight(0x8fd3e8, 3, 6)
+            rim.position.set(-0.8, 1, -0.4)
+            scene.add(rim)
+
+            // The model climbs out from under the card, so whatever is still below
+            // the mark's plane must not be drawn.
+            renderer.localClippingEnabled = true
+            cat.applyClipping(clipPlane)
+
+            intro.classList.add('is-gone')
+            hint.hidden = false
+            if (debugging) debugPanel.hidden = false
+          },
+
+          onCameraStatusChange: ({ status }) => {
+            if (status === 'failed') {
+              intro.classList.remove('is-gone')
+              startButton.disabled = false
+              setNote('カメラを開始できませんでした。ブラウザの設定で許可してから、もう一度お試しください。', true)
+            }
+          },
+
+          onVideoSizeChange: ({ orientation }) => {
+            uiOrientation = orientation
+            overlay.resize()
+          },
+
+          onException: (error) => setNote(`エラー: ${error?.message ?? error}`, true),
+
+          onUpdate: ({ processGpuResult }) => {
+            const delta = clock.getDelta()
+
+            fpsFrames += 1
+            const now = performance.now()
+            if (now - fpsAt >= 500) {
+              fps = (fpsFrames * 1000) / (now - fpsAt)
+              fpsAt = now
+              fpsFrames = 0
+            }
+
+            if (!anchor) return
+            const { camera } = XR8.Threejs.xrScene()
+
+            // The card's plane, in world space: the clip that hides the buried part
+            // of the model, and the axis every stroke turns it about.
+            anchor.updateMatrixWorld(true)
+            markNormal.setFromMatrixColumn(anchor.matrixWorld, 1).normalize()
+            objectPosition.setFromMatrixPosition(anchor.matrixWorld)
+            clipPlane.setFromNormalAndCoplanarPoint(markNormal, objectPosition)
+
+            cat.group.updateMatrixWorld(true)
+            worldScale.setFromMatrixColumn(cat.group.matrixWorld, 0)
+            circle = screenCircle(cat.group, camera, cat.radius * worldScale.length(), {
+              width: window.innerWidth,
+              height: window.innerHeight,
+            })
+
+            if (handOn && handTracker && frames++ % DETECT_EVERY === 0) {
+              const pixels = processGpuResult?.camerapixelarray
+              if (pixels && cameraFrame.update(pixels, frameTurn())) {
+                const landmarks = handTracker.detect(cameraFrame.canvas, performance.now())
+                // Contact is judged on screen: the landmarks carry no depth that
+                // could place the finger in front of or behind the object.
+                const rect = coverRect(cameraFrame.shape, {
+                  width: window.innerWidth,
+                  height: window.innerHeight,
+                })
+                const point = landmarks ? fingertip(landmarks, rect) : null
+                handSeen = Boolean(landmarks)
+                touching = isTouching(point, circle)
+
+                const sinceDetect = lastDetectAt ? (now - lastDetectAt) / 1000 : 0
+                lastDetectAt = now
+                const { closed, scale, speed } = pinch.update(landmarks, sinceDetect)
+                pinched = closed
+                cat.setSize(scale)
+
+                const { from, to } = stroke.update({ point, touching })
+                spinBy(swirlAngle(from, to, circle))
+
+                overlay.draw(landmarks, rect, { touching, pinched })
+                hint.classList.toggle('is-found', touching)
+                handReadout = [
+                  `hand    ${landmarks ? 'yes' : 'no'}`,
+                  `pinch   ${closed ? 'CLOSED' : 'open'}`,
+                  `size    ${scale.toFixed(2)}x`,
+                  `speed   ${speed.toFixed(1)}/s`,
+                  `frame   ${cameraFrame.shape.width}x${cameraFrame.shape.height} @${frameTurn()}deg`,
+                ]
+              }
+            }
+
+            cat.setHighlight(touching || swiping || screenPinching ? 1 : 0)
+            cat.update(delta)
+
+            if (debugging) {
+              debugPanel.textContent = [
+                ...handReadout,
+                `mark    ${(span * 1000).toFixed(1)}u (declared ${(markWidth * 1000).toFixed(0)})`,
+                `size    ${modelSize}x mark`,
+                `swipe   ${swiping ? 'YES' : screenPinching ? 'PINCH' : 'no'}`,
+                `touch   ${touching ? 'YES' : 'no'}`,
+                `turn    ${cat.turn}deg`,
+                `fps     ${fps.toFixed(0)}`,
+                `object  ${circle ? `${circle.x.toFixed(0)},${circle.y.toFixed(0)} r${circle.r.toFixed(0)}` : '-'}`,
+              ].join('\n')
+            }
+          },
+
+          listeners: [
+            {
+              event: 'reality.imagescanning',
+              process: () => {
+                if (!anchor) hintText.textContent = 'Looking for the mark'
+              },
+            },
+            {
+              event: 'reality.imagefound',
+              process: ({ detail }) => {
+                // Placed once and left alone. SLAM holds the pose from here, so a
+                // second sighting must not move what is already standing there.
+                if (anchor) return
+
+                const { scene } = XR8.Threejs.xrScene()
+                span = markerSpan(detail, markWidth)
+
+                anchor = new THREE.Group()
+                anchor.position.copy(detail.position)
+                anchor.quaternion.copy(detail.rotation)
+                // One anchor unit is one mark width, which is what the model was
+                // fitted against — the same footing a MindAR anchor gives it.
+                anchor.scale.setScalar(span)
+
+                // The model stands on a mark whose normal is +Z; an 8th Wall image
+                // target lies in the XZ plane, so the assembly is laid back.
+                const frame = new THREE.Group()
+                frame.rotation.x = -Math.PI / 2
+                frame.add(cat.group)
+                anchor.add(frame)
+                scene.add(anchor)
+
+                cat.reveal()
+                hint.classList.add('is-found')
+                hintText.textContent = 'Swipe it to turn'
+                hand.hidden = false
+                showCacheState()
+              },
+            },
+          ],
+        },
+      ])
+
+      XR8.run({ canvas })
+    },
+    { once: true },
+  )
+}
 const reason = unsupportedReason()
 if (reason) {
   startButton.disabled = true
   setNote(reason, true)
 } else {
-  setNote('カメラ映像は端末内で処理され、送信されません。')
-  startButton.disabled = false
-  startButton.addEventListener('click', launch, { once: true })
+  prepare().catch((error) =>
+    setNote(`読み込みに失敗しました: ${error?.message ?? error}`, true),
+  )
 }
