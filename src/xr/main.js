@@ -420,7 +420,7 @@ async function launch() {
         `anim    ${cat.animationTime.toFixed(1)}s`,
         `fps     ${fps.toFixed(0)}`,
         `jitter  ${jitter.toFixed(2)}px/f`,
-        `alpha   ${cat.transparent ? 'ON' : 'off'}`,
+        `pres    ${cat.presence.toFixed(2)}`,
         `fit     r=${cat.radius.toFixed(2)} s=${cat.fitScale.toFixed(3)}`,
         `object  ${circle ? `${circle.x.toFixed(0)},${circle.y.toFixed(0)} r${circle.r.toFixed(0)}` : '-'}`,
       ].join('\n')

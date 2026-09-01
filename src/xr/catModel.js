@@ -111,9 +111,9 @@ export async function loadCatModel() {
       heading.rotation.z = (degrees * Math.PI) / 180
     },
 
-    /** Whether the material is currently in the transparent path. */
-    get transparent() {
-      return materials.some((m) => m.transparent)
+    /** How faded in the object is, 0..1. */
+    get presence() {
+      return motion.presence
     },
 
     /** Seconds into the idle loop — the debug readout reports this. */
