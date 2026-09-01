@@ -33,6 +33,7 @@
 
     <script type="module">
       import * as THREE from 'three'
+      import { markerSpan, spanToScale } from '/xr2/marker.js'
       import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
       window.THREE = THREE   // XR8.Threejs reads the global rather than an import
 
@@ -163,13 +164,8 @@
                   live.image = `検出 (${detail.name})`
                   if (anchor) return paint()
 
-                  // Report what the engine actually hands over: the size the
-                  // object ends up is only as trustworthy as these numbers.
-                  const num = (v) => (typeof v === 'number' ? v.toFixed(4) : String(v))
-                  say('detail:', Object.keys(detail).join(','))
-                  say(`scaledW=${num(detail.scaledWidth)} scaledH=${num(detail.scaledHeight)} scale=${num(detail.scale)}`)
                   const dp = detail.position
-                  say(`pos ${num(dp?.x)},${num(dp?.y)},${num(dp?.z)}`,
+                  say(`mark ${(markerSpan(detail, markWidth) * 1000).toFixed(1)}u`,
                       `| dist ${Math.hypot(dp?.x ?? 0, dp?.y ?? 0, dp?.z ?? 0).toFixed(3)}`)
 
                   // Place once, then let SLAM hold it: the card is an anchor
@@ -196,11 +192,12 @@
                   })
                   const size = new THREE.Vector3()
                   box.getSize(size)
-                  // A bit wider than the printed mark, as on the old page.
-                  // detail.geometry.scaledWidth is an aspect ratio, not a size
-                  // — the real width is the one we declared on the target.
-                  const across = markWidth
-                  const scale = (across * sizeFactor) / Math.max(size.x, size.z)
+                  // Measure the mark as the engine sees it rather than as we
+                  // declared it: the two only agree when absolute scale really
+                  // lands in metres, and the model has to sit on the mark
+                  // either way.
+                  const across = markerSpan(detail, markWidth)
+                  const scale = spanToScale(across, Math.max(size.x, size.z), sizeFactor)
                   cat.scale.setScalar(scale)
                   modelHeight = size.y * scale
                   cat.position.y = -modelHeight
@@ -211,7 +208,7 @@
                     gltf.animations.forEach((c) => mixer.clipAction(c).play())
                   }
                   live.anchored = true
-                  live.cat = `${(across * sizeFactor * 1000).toFixed(0)}mm`
+                  live.cat = `${sizeFactor}x mark`
                   say('固定しました')
                   paint()
                 },
