@@ -6,9 +6,10 @@
     <title>SLAM spike — Orthogonal Interactive</title>
     <meta name="robots" content="noindex" />
     <style>
-      html, body { margin: 0; background: #0b1211; color: #dbe7e6;
+      html, body { margin: 0; width: 100%; height: 100%; background: #0b1211; color: #dbe7e6;
                    font-family: ui-monospace, Menlo, monospace; overflow: hidden; touch-action: none; }
       #scene { position: fixed; inset: 0; }
+      #scene canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
       #log { position: fixed; top: 0; left: 0; margin: 0; padding: .6rem .8rem; z-index: 20; max-width: 100%;
              background: rgba(11,18,17,.82); font-size: .62rem; line-height: 1.6; white-space: pre-wrap; }
       #go { position: fixed; left: 50%; bottom: 2rem; transform: translateX(-50%); z-index: 20;
@@ -84,7 +85,6 @@
         go.hidden = true
         try {
           const canvas = document.createElement('canvas')
-          canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%'
           document.querySelector('#scene').appendChild(canvas)
 
           let cat = null
@@ -97,9 +97,13 @@
             XR8.GlTextureRenderer.pipelineModule(),
             XR8.Threejs.pipelineModule(),
             XR8.XrController.pipelineModule(),
+            // Without this the camera feed is drawn into whatever size the
+            // canvas happened to have, which on a phone is a strip at the top.
+            XRExtras.FullWindowCanvas.pipelineModule(),
             XRExtras.AlmostThere.pipelineModule(),   // unsupported-device page
             XRExtras.Loading.pipelineModule(),       // camera permission + spinner
             XRExtras.RuntimeError.pipelineModule(),  // shows engine errors on screen
+            XRExtras.PauseOnHidden.pipelineModule(), // release the camera when backgrounded
             {
               name: 'spike',
               onStart: () => {
