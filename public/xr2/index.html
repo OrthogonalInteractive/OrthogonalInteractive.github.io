@@ -66,7 +66,15 @@
         fetch('/xr2/card-target.json').then((r) => r.json()),
         new GLTFLoader().loadAsync('/xr/cat.glb'),
       ])
-      say('target & model ready:', gltf.animations.length, 'clip(s)')
+
+      // Monocular SLAM has no scale of its own. Telling the engine how wide the
+      // printed mark really is, and asking for absolute scale, is what makes
+      // the parallax of the virtual object match the real card as you move.
+      const markWidth = Number(new URLSearchParams(location.search).get('w')) || 0.08
+      target.physicalWidthInMeters = markWidth
+      target.moveable = false
+      say('target & model ready |', gltf.animations.length, 'clip |',
+          `mark ${(markWidth * 100).toFixed(1)}cm (?w= で変更)`)
 
       const go = document.querySelector('#go')
       go.disabled = false
@@ -84,8 +92,10 @@
         let modelHeight = 1
         const clipPlane = new THREE.Plane()
 
+        // scale must be set before XR8.run(); the engine refuses it after.
         XR8.XrController.configure({
           disableWorldTracking: false,
+          scale: 'absolute',
           imageTargetData: [target],
         })
 
@@ -163,7 +173,10 @@
                   const size = new THREE.Vector3()
                   box.getSize(size)
                   // A bit wider than the printed mark, as on the old page.
-                  const scale = (detail.scaledWidth ?? 1) * 1.1 / Math.max(size.x, size.z)
+                  // With absolute scale the target reports its real width, so
+                  // the cat can be sized against the card rather than guessed.
+                  const across = detail.scaledWidth || markWidth
+                  const scale = (across * 1.1) / Math.max(size.x, size.z)
                   cat.scale.setScalar(scale)
                   modelHeight = size.y * scale
                   cat.position.y = -modelHeight
@@ -174,7 +187,7 @@
                     gltf.animations.forEach((c) => mixer.clipAction(c).play())
                   }
                   live.anchored = true
-                  say('固定しました。名刺を隠しても残ります。')
+                  say(`固定 | 幅 ${(across * 100).toFixed(1)}cm 相当`)
                   paint()
                 },
               },
