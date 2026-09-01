@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>SLAM spike — Orthogonal Interactive</title>
+    <meta name="robots" content="noindex" />
+    <style>
+      html, body { margin: 0; background: #0b1211; color: #dbe7e6; font-family: ui-monospace, Menlo, monospace; overflow: hidden; }
+      #scene { position: fixed; inset: 0; }
+      #log { position: fixed; inset: 0 auto auto 0; margin: 0; padding: .7rem .9rem; max-width: 100%; z-index: 10;
+             background: rgba(11,18,17,.8); font-size: .68rem; line-height: 1.65; white-space: pre-wrap; }
+      #go { position: fixed; left: 50%; bottom: 2rem; transform: translateX(-50%); z-index: 10;
+            padding: .85rem 1.6rem; border: none; border-radius: 999px; background: #8fd3e8; color: #070c0b;
+            font: inherit; font-size: .9rem; }
+    </style>
+    <!-- Loaded from the CDN so the spike costs the repository nothing. -->
+    <script src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js" async crossorigin="anonymous" data-preload-chunks="slam"></script>
+  </head>
+  <body>
+    <div id="scene"></div>
+    <pre id="log">loading engine…</pre>
+    <button id="go" type="button" disabled>カメラを開始</button>
+
+    <script type="module">
+      const log = document.querySelector('#log')
+      const lines = []
+      const say = (...parts) => { lines.push(parts.join(' ')); log.textContent = lines.join('\n') }
+
+      const XR8Ready = new Promise((resolve) => {
+        if (window.XR8) return resolve(window.XR8)
+        window.addEventListener('xrloaded', () => resolve(window.XR8), { once: true })
+      })
+
+      const started = performance.now()
+      const XR8 = await XR8Ready
+      say('engine loaded in', ((performance.now() - started) / 1000).toFixed(1) + 's')
+      say('XR8 keys:', Object.keys(XR8).slice(0, 12).join(','))
+
+      // The only question this spike has to answer first: does it run at all
+      // without the retired hosted service and its app key?
+      try {
+        say('compatible:', XR8.XrDevice.isDeviceBrowserCompatible())
+        const est = XR8.XrDevice.deviceEstimate()
+        say('device:', `${est.os} ${est.osVersion} ${est.model} ${est.browser?.name} ${est.browser?.majorVersion}`)
+        const reasons = XR8.XrDevice.incompatibleReasons?.() ?? []
+        say('incompatible reasons:', JSON.stringify(reasons))
+      } catch (error) {
+        say('device check threw:', error?.message ?? error)
+      }
+
+      const go = document.querySelector('#go')
+      go.disabled = false
+      say('')
+      say('カメラを開始したあと、スマホをゆっくり左右に動かしてください。')
+      say('pos の数値が動けば SLAM が効いています。')
+      go.addEventListener('click', async () => {
+        go.disabled = true
+        say('--- starting ---')
+        try {
+          XR8.XrController.configure({ disableWorldTracking: false })
+          say('XrController configured (world tracking on)')
+
+          XR8.addCameraPipelineModules([
+            XR8.GlTextureRenderer.pipelineModule(),
+            XR8.XrController.pipelineModule(),
+            {
+              name: 'spike',
+              onStart: () => say('pipeline started'),
+              onException: (e) => say('EXCEPTION:', e?.message ?? e),
+              onUpdate: ({ processCpuResult }) => {
+                const r = processCpuResult.reality
+                if (!r) return
+                window.__poses = (window.__poses || 0) + 1
+                // Report sparsely: the point is to see whether the pose moves
+                // as the phone moves, and what the tracker says about itself.
+                if (window.__poses % 30 !== 1 || window.__poses > 900) return
+                const p = r.position
+                say(`#${window.__poses}`,
+                    `pos ${p.x.toFixed(2)},${p.y.toFixed(2)},${p.z.toFixed(2)}`,
+                    `| ${r.trackingStatus}${r.trackingReason ? '/' + r.trackingReason : ''}`)
+              },
+            },
+          ])
+
+          const canvas = document.createElement('canvas')
+          canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%'
+          document.querySelector('#scene').appendChild(canvas)
+          XR8.run({ canvas })
+          say('XR8.run() called')
+        } catch (error) {
+          say('START FAILED:', error?.message ?? error)
+        }
+      })
+    </script>
+  </body>
+</html>
