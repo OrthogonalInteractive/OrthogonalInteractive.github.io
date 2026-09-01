@@ -70,11 +70,15 @@
       // Monocular SLAM has no scale of its own. Telling the engine how wide the
       // printed mark really is, and asking for absolute scale, is what makes
       // the parallax of the virtual object match the real card as you move.
-      const markWidth = Number(new URLSearchParams(location.search).get('w')) || 0.08
+      const params = new URLSearchParams(location.search)
+      const markWidth = Number(params.get('w')) || 0.024
+      // At true scale the cat is only as big as the card says, so how much
+      // larger than the mark it should read is worth having to hand.
+      const sizeFactor = Number(params.get('s')) || 1.1
       target.physicalWidthInMeters = markWidth
       target.moveable = false
-      say('target & model ready |', gltf.animations.length, 'clip |',
-          `mark ${(markWidth * 100).toFixed(1)}cm (?w= で変更)`)
+      say('target & model ready |', gltf.animations.length, 'clip')
+      say(`mark ${(markWidth * 1000).toFixed(0)}mm × ${sizeFactor} (?w= ?s= で変更)`)
 
       const go = document.querySelector('#go')
       go.disabled = false
@@ -176,7 +180,7 @@
                   // With absolute scale the target reports its real width, so
                   // the cat can be sized against the card rather than guessed.
                   const across = detail.scaledWidth || markWidth
-                  const scale = (across * 1.1) / Math.max(size.x, size.z)
+                  const scale = (across * sizeFactor) / Math.max(size.x, size.z)
                   cat.scale.setScalar(scale)
                   modelHeight = size.y * scale
                   cat.position.y = -modelHeight
@@ -187,7 +191,7 @@
                     gltf.animations.forEach((c) => mixer.clipAction(c).play())
                   }
                   live.anchored = true
-                  say(`固定 | 幅 ${(across * 100).toFixed(1)}cm 相当`)
+                  say(`固定 | 猫の幅 ${(across * sizeFactor * 1000).toFixed(0)}mm`)
                   paint()
                 },
               },
