@@ -16,9 +16,14 @@ const _point = new Vector3()
  * centimetre-authored rig does — reports a size nobody ever sees. Pushing the
  * vertices through the skeleton is the only measurement that agrees with the
  * renderer.
+ *
+ * The matrices have to be brought up to date through updateMatrixWorld and not
+ * updateWorldMatrix: SkinnedMesh overrides only the former, and it is there that
+ * it refreshes the bind matrix inverse the skinning depends on. Measured through
+ * the latter, a centimetre-authored rig comes back a hundred times too small.
  */
 export function restBounds(object) {
-  object.updateWorldMatrix(false, true)
+  object.updateMatrixWorld(true)
   const bounds = new Box3()
   object.traverse((child) => {
     if (!child.isMesh) return
@@ -44,20 +49,20 @@ export function restBounds(object) {
  * Works out how to sit an imported model on the tracked mark.
  *
  * An anchor spans one unit across the target's width. The box arrives in the
- * mark's own frame — already stood upright, so Z is the height and X and Y are
- * what rests on the card. Taking the footprint across X and Z instead mistakes
- * a standing model's height for its width and fits it by how tall it is.
+ * glTF's own frame, Y up and untouched — see restBounds on why it cannot be
+ * measured once the model has been stood up — so X and Z are what rests on the
+ * card and Y is the height that has to clear it.
  */
 export function fitToMarker(box, { width, hover }) {
   const size = new Vector3()
   box.getSize(size)
-  const footprint = Math.max(size.x, size.y) || 1
+  const footprint = Math.max(size.x, size.z) || 1
   const scale = width / footprint
 
   return {
     scale,
-    // Raise the underside to the hover gap.
-    z: hover - box.min.z * scale,
-    radius: (Math.max(size.x, size.y) * scale) / 2,
+    // Raise the underside to the hover gap. Marker Z is model Y, once upright.
+    z: hover - box.min.y * scale,
+    radius: (footprint * scale) / 2,
   }
 }

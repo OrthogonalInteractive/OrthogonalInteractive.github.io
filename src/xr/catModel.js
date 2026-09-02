@@ -65,13 +65,15 @@ export async function loadFigureFactory({
   }
   const template = gltf.scene
 
-  // glTF is Y-up; a MindAR anchor's Z points out of the card.
-  template.rotation.x = Math.PI / 2
-
-  // Measured once, off the model as it was authored: every copy is the same
-  // shape, and the rest pose is the only pose these bounds are valid for.
+  // Measured once, off the model as it was authored and before it is turned:
+  // every copy is the same shape, the rest pose is the only pose these bounds
+  // are valid for, and a skinned mesh cannot be measured through a transform
+  // added after its bind matrix was fixed.
   const box = restBounds(template)
   const { scale, z, radius } = fitToMarker(box, { width: size, hover: HOVER })
+
+  // glTF is Y-up; the mark's Z points out of the card.
+  template.rotation.x = Math.PI / 2
 
   return {
     /**
