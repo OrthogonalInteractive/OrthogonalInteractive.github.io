@@ -47,13 +47,16 @@ const debugging = params.has('debug')
 const markWidth = Number(params.get('w')) || MARK_WIDTH
 const modelSize = Number(params.get('s')) || MODEL_SIZE
 const turnOverride = params.get('rot')
-// Which of the image target's own axes points out of the card, and which way
-// along it. Assuming either has not worked: recovering a plane's pose from what
-// a camera sees admits two solutions that are mirror images through the card, so
-// the normal can come back pointing into the desk — which buries the model under
-// its own clipping plane instead of standing it on the print. Measured at
-// placement instead, and only overridden by hand for testing.
-const normalAxis = (params.get('axis') ?? 'auto').toLowerCase()
+// An 8th Wall image target lies in its own XY plane with +Z out of the print —
+// the same convention a MindAR anchor uses, and the one their own samples rely
+// on when they hang an unrotated PlaneGeometry off a target. Laying the model on
+// +Y instead stood it up at right angles to the card.
+//
+// Which way along +Z is not a convention but a measurement: recovering a plane's
+// pose from what a camera sees admits two solutions mirrored through the plane,
+// so the normal can come back pointing into the desk, and the model then rises
+// under the clipping plane meant to hide it while it is still buried.
+const normalAxis = (params.get('axis') ?? 'z').toLowerCase()
 const COLUMN = { x: 0, y: 1, z: 2 }
 const heading = Number(params.get('spin')) || 0
 const UP = new THREE.Vector3(0, 0, 1)
@@ -590,6 +593,9 @@ async function prepare() {
                     .dot(toCamera),
                 )
 
+                // ?axis=auto takes whichever leans nearest the camera, which is
+                // only a fallback: the convention is fixed, and picking it per
+                // sighting wanders when the card is seen at a glancing angle.
                 normalColumn = COLUMN[normalAxis] ?? lean.reduce(
                   (best, value, column) => (Math.abs(value) > Math.abs(lean[best]) ? column : best),
                   0,
