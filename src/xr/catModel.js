@@ -44,8 +44,12 @@ export async function loadCatFactory({ size = WIDTH } = {}) {
   const { scale, z, radius } = fitToMarker(box, { width: size, hover: HOVER })
 
   return {
-    /** Another cat, with its own materials, animation clock and motion. */
-    create: () => build({ gltf, template, box, scale, z, radius }),
+    /**
+     * Another cat, with its own materials, animation clock and motion.
+     * `tint` shades that copy: the glow is baked into the base colour, so a
+     * colour multiplied through both albedo and emissive carries it.
+     */
+    create: ({ tint } = {}) => build({ gltf, template, box, scale, z, radius, tint }),
 
     /** The geometry and textures every copy shares. */
     dispose() {
@@ -72,7 +76,8 @@ export async function loadCatModel(options) {
   })
 }
 
-function build({ gltf, template, box, scale, z, radius }) {
+function build({ gltf, template, box, scale, z, radius, tint }) {
+  const shade = new THREE.Color(tint ?? 0xffffff)
   // A SkinnedMesh cannot be copied with Object3D.clone: the copy's bones are
   // the originals', so every cat would be posed by whichever skeleton moved
   // last. SkeletonUtils rebuilds the binding against the cloned bones.
@@ -102,7 +107,8 @@ function build({ gltf, template, box, scale, z, radius }) {
     const material = child.material.clone()
     child.material = material
     material.emissiveMap = material.map
-    material.emissive = new THREE.Color(0xffffff)
+    material.color.multiply(shade)
+    material.emissive = shade.clone()
     material.emissiveIntensity = EMISSIVE_REST
     materials.push(material)
     // The skinned bounds are computed from the rest pose, and the idle motion

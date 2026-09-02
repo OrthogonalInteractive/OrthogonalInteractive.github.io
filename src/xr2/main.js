@@ -35,7 +35,12 @@ const MARK_WIDTH = 0.024
 const POSE_SMOOTHING = 9
 
 // Carrying one clear of the card brings the next one up out of it, to a point.
-const MAX_CATS = 3
+const MAX_CATS = 5
+
+// One shade each, so a cat can be told from the one beside it. The first keeps
+// the house cyan the artwork is drawn in; the rest step round from it without
+// leaving the same luminous family.
+const TINTS = [0x8fd3e8, 0x9fe8bd, 0xc3a8f2, 0xf2d489, 0xf29fae]
 const CARRY_LIMIT = 6 // how far out one can be taken at all, in mark widths
 
 const MAX_SCALE = 2.5
@@ -224,7 +229,7 @@ async function prepare() {
   /** Stands another cat on the mark, if there is room for one. */
   function addCat() {
     if (!frame || cats.length >= MAX_CATS) return null
-    const cat = catalogue.create()
+    const cat = catalogue.create({ tint: TINTS[cats.length % TINTS.length] })
     cat.heading = heading
     cat.applyClipping(clipPlane)
 
