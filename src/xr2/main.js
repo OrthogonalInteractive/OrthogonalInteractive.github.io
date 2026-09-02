@@ -9,6 +9,8 @@ import { createStrokeTracker } from '../xr/stroke.js'
 import { swirlAngle } from '../xr/swirl.js'
 import { unsupportedReason } from '../xr/support.js'
 import { createCameraFrame } from './cameraFrame.js'
+import { createCarry } from './carry.js'
+import { createReach } from './reach.js'
 import { markerSpan } from './marker.js'
 import { coverRect } from './view.js'
 import '../xr/xr.css'
@@ -127,6 +129,8 @@ async function prepare() {
   const pinch = createPinchScale({ maxScale: MAX_SCALE })
   const swipe = createStrokeTracker()
   const screenPinch = createScreenPinch({ max: MAX_SCALE })
+  const carry = createCarry()
+  const reach = createReach()
 
   const clock = new THREE.Clock()
   const clipPlane = new THREE.Plane()
@@ -136,6 +140,8 @@ async function prepare() {
   const worldScale = new THREE.Vector3()
 
   let anchor = null
+  let frame = null
+  let carrier = null
   let circle = null
   let span = markWidth
   let uiOrientation = 0
@@ -435,26 +441,63 @@ async function prepare() {
 
                 const sinceDetect = lastDetectAt ? (now - lastDetectAt) / 1000 : 0
                 lastDetectAt = now
-                const { closed, scale, speed } = pinch.update(landmarks, sinceDetect)
+                // A hand pinch is how the model is picked up, so it no longer
+                // resizes it; two fingers on the glass still do.
+                const { closed, speed } = pinch.update(landmarks, sinceDetect)
                 pinched = closed
-                cat.setSize(scale)
 
-                const { from, to } = stroke.update({ point, touching })
-                spinBy(swirlAngle(from, to, circle))
+                const held = carry.held
+                const grabbing = point && (held ? closed : closed && touching)
+                const grip = grabbing
+                  ? reach.at(point, {
+                      camera,
+                      frame,
+                      card: clipPlane,
+                      height: carry.position.z,
+                      unit: span,
+                      viewport: { width: window.innerWidth, height: window.innerHeight },
+                    })
+                  : null
+
+                if (!closed) {
+                  carry.release()
+                } else if (grip) {
+                  if (held) carry.moveTo(grip)
+                  else carry.grab(grip)
+                }
+
+                // A finger carrying the model is not stroking it.
+                if (!carry.held) {
+                  const { from, to } = stroke.update({ point, touching })
+                  spinBy(swirlAngle(from, to, circle))
+                } else {
+                  stroke.update({ point: null, touching: false })
+                }
 
                 overlay.draw(landmarks, rect, { touching, pinched })
-                hint.classList.toggle('is-found', touching)
+                hint.classList.toggle('is-found', touching || carry.held)
+                hintText.textContent = carry.held
+                  ? 'Let go to drop it'
+                  : touching
+                    ? 'Pinch to pick it up'
+                    : 'Stroke it to turn'
                 handReadout = [
                   `hand    ${landmarks ? 'yes' : 'no'}`,
                   `pinch   ${closed ? 'CLOSED' : 'open'}`,
-                  `size    ${scale.toFixed(2)}x`,
                   `speed   ${speed.toFixed(1)}/s`,
                   `frame   ${cameraFrame.shape.width}x${cameraFrame.shape.height} @${frameTurn()}deg`,
                 ]
               }
             }
 
-            cat.setHighlight(touching || swiping || screenPinching ? 1 : 0)
+            // The carried offset rides its own group, so the model's own rise
+            // out of the card and its spin are left entirely alone.
+            if (carrier) {
+              const { x, y, z } = carry.update(delta)
+              carrier.position.set(x, y, z)
+            }
+
+            cat.setHighlight(touching || carry.held || swiping || screenPinching ? 1 : 0)
             cat.update(delta)
 
             if (debugging) {
@@ -464,6 +507,7 @@ async function prepare() {
                 `size    ${modelSize}x mark`,
                 `swipe   ${swiping ? 'YES' : screenPinching ? 'PINCH' : 'no'}`,
                 `touch   ${touching ? 'YES' : 'no'}`,
+                `carry   ${carry.held ? 'HELD' : 'free'} ${carry.position.x.toFixed(1)},${carry.position.y.toFixed(1)},${carry.position.z.toFixed(2)}`,
                 `turn    ${cat.turn}deg`,
                 `track   ${status}`,
                 `fps     ${fps.toFixed(0)}`,
@@ -499,9 +543,13 @@ async function prepare() {
 
                 // The model stands on a mark whose normal is +Z; an 8th Wall image
                 // target lies in the XZ plane, so the assembly is laid back.
-                const frame = new THREE.Group()
+                frame = new THREE.Group()
                 frame.rotation.x = -Math.PI / 2
-                frame.add(cat.group)
+                // Where a carried model is held. Keeping it off the model's own
+                // group leaves the rise out of the card to work as it always did.
+                carrier = new THREE.Group()
+                carrier.add(cat.group)
+                frame.add(carrier)
                 anchor.add(frame)
                 scene.add(anchor)
 
