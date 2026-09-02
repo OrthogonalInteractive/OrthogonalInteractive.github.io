@@ -34,35 +34,57 @@ function readAccessor(index) {
   return out
 }
 
-/** The body's configuration at one end of a clip: a rotation per joint. */
+/**
+ * The body's configuration at one end of a clip: a rotation per joint, and
+ * where the root sits. Rotations alone cannot tell a figure lying on the floor
+ * from one standing up — the joints can be folded much the same either way, and
+ * it is the root that has dropped.
+ */
 function poses(animation) {
   const first = new Map()
   const last = new Map()
+  let firstRoot = null
+  let lastRoot = null
   for (const channel of animation.channels) {
-    if (channel.target.path !== 'rotation') continue
     const values = readAccessor(animation.samplers[channel.sampler].output)
     if (!values.length) continue
-    first.set(channel.target.node, values[0])
-    last.set(channel.target.node, values[values.length - 1])
+    if (channel.target.path === 'rotation') {
+      first.set(channel.target.node, values[0])
+      last.set(channel.target.node, values[values.length - 1])
+    } else if (channel.target.path === 'translation') {
+      firstRoot = values[0]
+      lastRoot = values[values.length - 1]
+    }
   }
-  return { first, last }
+  return { first, last, firstRoot, lastRoot }
 }
 
-/** Mean angle between two poses, in degrees. */
-function apart(a, b) {
+// A centimetre of root height counts for as much as a degree of joint. Enough
+// that standing up out of a heap never reads as the cheaper join. Only the
+// height counts: travel across the ground is taken out of these clips before
+// they are played, so a clip that ends far downfield still ends standing.
+const ROOT_WEIGHT = 1
+
+/** How far apart two poses are, in degrees with the root folded in. */
+function apart(from, to) {
   let total = 0
   let counted = 0
-  for (const [node, q] of a) {
-    const r = b.get(node)
+  for (const [node, q] of from.pose) {
+    const r = to.pose.get(node)
     if (!r) continue
     const dot = Math.min(1, Math.abs(q[0] * r[0] + q[1] * r[1] + q[2] * r[2] + q[3] * r[3]))
     total += (2 * Math.acos(dot) * 180) / Math.PI
     counted += 1
   }
-  return counted ? total / counted : Infinity
+  if (!counted) return Infinity
+  const a = from.root
+  const b = to.root
+  const root = a && b ? Math.abs(a[1] - b[1]) : 0
+  return total / counted + root * ROOT_WEIGHT
 }
 
-const clips = json.animations.map((animation) => {
+const dropped = (process.env.DROP ?? '').split(',').filter(Boolean)
+const clips = json.animations.filter((a) => !dropped.includes(a.name)).map((animation) => {
   let seconds = 0
   for (const sampler of animation.samplers) {
     const input = json.accessors[sampler.input]
@@ -74,6 +96,12 @@ const clips = json.animations.map((animation) => {
 const start = clips.findIndex((clip) => clip.name === opening)
 if (start < 0) throw new Error(`no clip named ${opening}`)
 
+const at = (clip) => ({ pose: clip.first, root: clip.firstRoot })
+const after = (clip) => ({ pose: clip.last, root: clip.lastRoot })
+const cost = (a, b) => apart(after(a), at(b))
+
+// Nearest next pose each time, which is quick but spends the good joins early
+// and leaves whatever is left to collide at the end.
 const order = [clips[start]]
 const left = clips.filter((_, i) => i !== start)
 while (left.length) {
@@ -81,17 +109,64 @@ while (left.length) {
   let best = 0
   let bestGap = Infinity
   left.forEach((clip, i) => {
-    const gap = apart(from.last, clip.first)
+    const gap = cost(from, clip)
     if (gap < bestGap) {
       bestGap = gap
       best = i
     }
   })
-  order.push(Object.assign(left[best], { gap: bestGap }))
+  order.push(left[best])
   left.splice(best, 1)
 }
-order[0].gap = apart(order[order.length - 1].last, order[0].first) // closing the loop
 
+/**
+ * What a round of the whole cycle costs, the loop back to the opening clip
+ * included. Squared, because one join of ninety degrees is seen and four of
+ * twenty are not, and a plain sum happily trades the second for the first.
+ */
+const roundTrip = (list) =>
+  list.reduce((sum, clip, i) => {
+    const gap = cost(list[(i - 1 + list.length) % list.length], clip)
+    return sum + gap * gap
+  }, 0)
+
+// Then move single clips wherever they fit better. The cost of a join depends
+// on which way round it is taken, so segments cannot simply be reversed; moving
+// one clip at a time is the improvement that stays honest about that.
+let total = roundTrip(order)
+for (let pass = 0; pass < 40; pass += 1) {
+  let improved = false
+  for (let from = 1; from < order.length; from += 1) {
+    for (let to = 1; to < order.length; to += 1) {
+      if (to === from) continue
+      const candidate = order.slice()
+      candidate.splice(to, 0, ...candidate.splice(from, 1))
+      const sum = roundTrip(candidate)
+      if (sum < total - 1e-6) {
+        order.length = 0
+        order.push(...candidate)
+        total = sum
+        improved = true
+      }
+    }
+  }
+  if (!improved) break
+}
+
+order.forEach((clip, i) => {
+  clip.gap = cost(order[(i - 1 + order.length) % order.length], clip)
+})
+
+if (process.env.MATRIX) {
+  const rows = ['Knock_Down', 'Stand_Up1', 'Backflip', 'CrouchLookAroundBow', 'Lunge_Roundhouse_Kick']
+  console.log('cost of A-end -> B-start, in degrees\n')
+  console.log('from \\ to'.padEnd(24) + clips.map((c) => c.name.slice(0, 7).padStart(8)).join(''))
+  for (const name of rows) {
+    const a = clips.find((c) => c.name === name)
+    console.log(name.padEnd(24) + clips.map((b) => cost(a, b).toFixed(0).padStart(8)).join(''))
+  }
+  console.log()
+}
 console.log('order'.padEnd(28), 'length  join from previous')
 let cycle = 0
 order.forEach((clip, i) => {

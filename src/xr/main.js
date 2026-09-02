@@ -53,25 +53,26 @@ const FIGURE_HEIGHT = 6.3
 
 // Which motion follows which. Measured rather than guessed — a crossfade hides
 // a small difference between the pose one clip ends on and the pose the next
-// starts from, never a large one. See tools/order-clips.mjs; it also lands on
-// an order that reads as something happening: arrive, get knocked down, get up.
+// starts from, never a large one. See tools/order-clips.mjs. Most joins land
+// under 30 degrees; Stand_Up1 begins on the floor and nothing else ends there,
+// so its two are the ones that show.
 const FIGURE_ORDER = [
   'Backflip',
   'Knock_Down',
-  'Stand_Up1',
-  'Wave_for_Help_1',
-  'Run_to_Walk_Transition',
-  'Hello_Run',
-  'slide_light',
-  'Running',
-  'Walking',
   'Stumble_Walk',
-  'Handstand_Flip',
+  'Run_to_Walk_Transition',
+  'Running',
+  'slide_light',
+  'Hello_Run',
+  'penguin_walk',
+  'Wave_for_Help_1',
+  'Walking',
   'ymca_dance',
+  'Handstand_Flip',
   'Lunge_Roundhouse_Kick',
+  'Stand_Up1',
   'CrouchLookAroundBow',
   'Crouch_and_Push_Forward',
-  'penguin_walk',
 ]
 
 // Its light is real rather than painted on, so it wants far less of itself fed
