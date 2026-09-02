@@ -166,7 +166,6 @@ async function prepare() {
   const cameraFrame = createCameraFrame()
   const pinch = createPinchScale({ maxScale: MAX_SCALE })
   const swipe = createStrokeTracker()
-  const screenPinch = createScreenPinch({ max: MAX_SCALE })
   const reach = createReach()
   const smoother = createPoseSmoother({ rate: POSE_SMOOTHING })
 
@@ -189,6 +188,7 @@ async function prepare() {
   let holding = null
   let hovered = null
   let swipeTarget = null
+  let pinchTarget = null
   let span = markWidth
   let normalColumn = 1
   let normalSign = 1
@@ -249,7 +249,17 @@ async function prepare() {
     carrier.add(cat.group)
     frame.add(carrier)
 
-    const entry = { cat, carrier, carry: createCarry({ limit: CARRY_LIMIT }), circle: null, depth: 0 }
+    // Its own sizing as well as its own carry: a screen pinch keeps the size it
+    // left behind, so one shared between models would hand the next one the
+    // last one's scale.
+    const entry = {
+      cat,
+      carrier,
+      carry: createCarry({ limit: CARRY_LIMIT }),
+      sizing: createScreenPinch({ max: MAX_SCALE }),
+      circle: null,
+      depth: 0,
+    }
     cats.push(entry)
     cat.reveal()
     say(`cat ${cats.length} of ${MAX_CATS}`)
@@ -346,8 +356,16 @@ async function prepare() {
 
     if (pointers.size === 2) {
       stopSwipe()
+      // Whatever is between the two fingers is what is being pinched; failing
+      // that, whichever one of them landed on something.
+      const [first, second] = pair()
+      pinchTarget =
+        catUnder({ x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 }) ??
+        catUnder(first) ??
+        catUnder(second)
+      if (!pinchTarget) return
       screenPinching = true
-      screenPinch.begin(...pair())
+      pinchTarget.sizing.begin(first, second)
       return
     }
     if (pointers.size > 2) return
@@ -362,8 +380,7 @@ async function prepare() {
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
 
     if (screenPinching && pointers.size >= 2) {
-      const size = screenPinch.update(...pair())
-      cats.forEach((entry) => entry.cat.setSize(size))
+      pinchTarget.cat.setSize(pinchTarget.sizing.update(...pair()))
       return
     }
     if (!swiping) return
@@ -378,7 +395,8 @@ async function prepare() {
     pointers.delete(event.pointerId)
     if (pointers.size < 2 && screenPinching) {
       screenPinching = false
-      screenPinch.end()
+      pinchTarget?.sizing.end()
+      pinchTarget = null
     }
     if (pointers.size === 0) {
       stopSwipe()
@@ -593,7 +611,7 @@ async function prepare() {
                 entry === holding ||
                 entry === hovered ||
                 (swiping && entry === swipeTarget) ||
-                screenPinching
+                (screenPinching && entry === pinchTarget)
               entry.cat.setHighlight(lit ? 1 : 0)
               entry.cat.update(delta)
             }
@@ -606,6 +624,7 @@ async function prepare() {
                 `aspect  ${aspect.toFixed(3)} (printed 4:3 = 1.333)`,
                 `size    ${modelSize}x mark`,
                 `swipe   ${swiping ? 'YES' : screenPinching ? 'PINCH' : 'no'}`,
+                `sizes   ${cats.map((e) => e.sizing.scale.toFixed(2)).join(' ')}`,
                 `touch   ${touching ? 'YES' : 'no'}`,
                 `cats    ${cats.length}/${MAX_CATS} ${holding ? 'CARRYING' : 'free'}`,
                 `out     ${cats.map((e) => Math.hypot(e.carry.position.x, e.carry.position.y).toFixed(1)).join(' ')} (need ${spawnDistance})`,
