@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { clone as cloneRigged } from 'three/addons/utils/SkeletonUtils.js'
 import { createEmergence } from './emerge.js'
 import { fitToMarker, restBounds } from './fit.js'
 import { createMotion } from './objectMotion.js'
@@ -24,21 +25,58 @@ const HEADING = 0
 const RISE_SECONDS = 1.4
 
 /**
- * Loads the studio's cat and sits it upright on the tracked mark.
+ * Loads the studio's cat once, ready to be stood on the mark as often as needed.
  *
  * `size` is how far it should reach across the mark, as a multiple of the
  * mark's width — the anchor spans one unit, so the fit is the same whether that
  * unit came from an image tracker or from a measured world-space anchor.
  */
-export async function loadCatModel({ size = WIDTH } = {}) {
+export async function loadCatFactory({ size = WIDTH } = {}) {
   const gltf = await new GLTFLoader().loadAsync(MODEL_URL)
-  const model = gltf.scene
+  const template = gltf.scene
 
   // glTF is Y-up; a MindAR anchor's Z points out of the card.
-  model.rotation.x = Math.PI / 2
+  template.rotation.x = Math.PI / 2
 
-  const box = restBounds(model)
+  // Measured once, off the model as it was authored: every copy is the same
+  // shape, and the rest pose is the only pose these bounds are valid for.
+  const box = restBounds(template)
   const { scale, z, radius } = fitToMarker(box, { width: size, hover: HOVER })
+
+  return {
+    /** Another cat, with its own materials, animation clock and motion. */
+    create: () => build({ gltf, template, box, scale, z, radius }),
+
+    /** The geometry and textures every copy shares. */
+    dispose() {
+      template.traverse((child) => {
+        if (!child.isMesh) return
+        child.geometry.dispose()
+        child.material.map?.dispose()
+        child.material.dispose()
+      })
+    },
+  }
+}
+
+/** One cat on the mark. Kept for callers that only ever want the one. */
+export async function loadCatModel(options) {
+  const factory = await loadCatFactory(options)
+  const cat = factory.create()
+  const disposeOne = cat.dispose
+  return Object.assign(cat, {
+    dispose() {
+      disposeOne()
+      factory.dispose()
+    },
+  })
+}
+
+function build({ gltf, template, box, scale, z, radius }) {
+  // A SkinnedMesh cannot be copied with Object3D.clone: the copy's bones are
+  // the originals', so every cat would be posed by whichever skeleton moved
+  // last. SkeletonUtils rebuilds the binding against the cloned bones.
+  const model = cloneRigged(template)
   model.scale.setScalar(scale)
 
   // Heading sits on its own group: the outer one carries the stroke rotation,
@@ -59,7 +97,10 @@ export async function loadCatModel({ size = WIDTH } = {}) {
   const materials = []
   model.traverse((child) => {
     if (!child.isMesh) return
-    const material = child.material
+    // Cloning shares materials, and these are written to every frame — one
+    // shared copy would make every cat light up and fade as one.
+    const material = child.material.clone()
+    child.material = material
     material.emissiveMap = material.map
     material.emissive = new THREE.Color(0xffffff)
     material.emissiveIntensity = EMISSIVE_REST
@@ -69,9 +110,14 @@ export async function loadCatModel({ size = WIDTH } = {}) {
     child.frustumCulled = false
   })
 
-  // The sleeping cat breathes and flicks its tail on a five second loop.
+  // The sleeping cat breathes and flicks its tail on a five second loop. Copies
+  // start at their own point in it: three cats breathing in step read as one
+  // object drawn three times.
   const mixer = gltf.animations.length ? new THREE.AnimationMixer(model) : null
-  gltf.animations.forEach((clip) => mixer.clipAction(clip).play())
+  gltf.animations.forEach((clip) => {
+    const action = mixer.clipAction(clip).play()
+    action.time = Math.random() * clip.duration
+  })
 
   const motion = createMotion(group)
 
@@ -140,14 +186,10 @@ export async function loadCatModel({ size = WIDTH } = {}) {
       })
     },
 
+    /** Only what this copy owns; the geometry and textures are the factory's. */
     dispose() {
       mixer?.stopAllAction()
-      model.traverse((child) => {
-        if (!child.isMesh) return
-        child.geometry.dispose()
-        child.material.map?.dispose()
-        child.material.dispose()
-      })
+      materials.forEach((material) => material.dispose())
     },
   }
 }

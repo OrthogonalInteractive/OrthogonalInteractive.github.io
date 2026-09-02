@@ -11,11 +11,17 @@ const GRAVITY = 20 // mark widths per second squared
 const RISE = 12 // how quickly it lifts once grabbed, per second
 const FOLLOW = 14 // how closely it chases the finger, per second
 
+// How far from the mark it can be taken. A finger pointed at the far distance
+// meets the card's plane at a glancing angle, where a millimetre of hand is
+// metres of ground, so the reach is stopped well before that runs away.
+const LIMIT = 6
+
 export function createCarry({
   lift = LIFT,
   gravity = GRAVITY,
   rise = RISE,
   follow = FOLLOW,
+  limit = LIMIT,
 } = {}) {
   let x = 0
   let y = 0
@@ -24,6 +30,14 @@ export function createCarry({
   let targetY = 0
   let fall = 0
   let held = false
+
+  /** Takes the point asked for, brought back within reach along its own line. */
+  function aim(point) {
+    const distance = Math.hypot(point.x, point.y)
+    const scale = distance > limit ? limit / distance : 1
+    targetX = point.x * scale
+    targetY = point.y * scale
+  }
 
   return {
     get held() {
@@ -38,14 +52,14 @@ export function createCarry({
     grab(point) {
       held = true
       fall = 0
-      x = targetX = point.x
-      y = targetY = point.y
+      aim(point)
+      x = targetX
+      y = targetY
     },
 
     moveTo(point) {
       if (!held) return
-      targetX = point.x
-      targetY = point.y
+      aim(point)
     },
 
     release() {

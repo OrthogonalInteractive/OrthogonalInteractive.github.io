@@ -63,12 +63,27 @@ describe('createCarry', () => {
 
   it('stays where it was dropped', () => {
     const carry = createCarry()
-    carry.grab({ x: 5, y: 7 })
+    carry.grab({ x: 3, y: 4 }) // within reach, so the drop is the only thing under test
     run(carry, 1)
     carry.release()
     const landed = run(carry, 2)
-    expect(landed.x).toBeCloseTo(5, 2)
-    expect(landed.y).toBeCloseTo(7, 2)
+    expect(landed.x).toBeCloseTo(3, 2)
+    expect(landed.y).toBeCloseTo(4, 2)
+  })
+
+  it('will not be carried past its reach', () => {
+    const carry = createCarry({ limit: 6 })
+    carry.grab({ x: 100, y: 0 })
+    const held = run(carry, 1)
+    expect(Math.hypot(held.x, held.y)).toBeCloseTo(6, 2)
+  })
+
+  it('keeps the direction it was pointed in when it reaches that far', () => {
+    const carry = createCarry({ limit: 5 })
+    carry.grab({ x: 30, y: 40 }) // 3:4:5, so a clean 30 units out
+    const held = run(carry, 1)
+    expect(held.x).toBeCloseTo(3, 2)
+    expect(held.y).toBeCloseTo(4, 2)
   })
 
   it('ignores a finger that has already let go', () => {

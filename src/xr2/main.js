@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { loadCatModel } from '../xr/catModel.js'
+import { loadCatFactory } from '../xr/catModel.js'
 import { fingertip, isTouching, screenCircle } from '../xr/contact.js'
 import { createHandOverlay } from '../xr/handOverlay.js'
 import { HAND_ASSETS, HAND_CACHE, createAssetStore, installAssetWorker } from '../xr/handAssets.js'
@@ -33,6 +33,11 @@ const MARK_WIDTH = 0.024
 // How quickly the mark's pose is taken up, per second. The tracker's estimate
 // moves about; following it directly is what makes the model judder.
 const POSE_SMOOTHING = 9
+
+// Carrying one clear of the card brings the next one up out of it, to a point.
+const MAX_CATS = 3
+const SPAWN_DISTANCE = 3 // mark widths from the mark before the next arrives
+const CARRY_LIMIT = 6 // and how far out one can be taken at all
 
 const MAX_SCALE = 2.5
 const SPIN_GAIN = 1
@@ -128,11 +133,10 @@ async function prepare() {
       `| compatible ${XR8.XrDevice.isDeviceBrowserCompatible()}`)
 
   setNote('モデルを読み込んでいます…')
-  const [target, cat] = await Promise.all([
+  const [target, catalogue] = await Promise.all([
     fetch(TARGET_URL).then((response) => response.json()),
-    loadCatModel({ size: modelSize }),
+    loadCatFactory({ size: modelSize }),
   ])
-  cat.heading = heading
   say(`target & model ready | w ${(markWidth * 1000).toFixed(0)}mm | s ${modelSize}x`,
       `| axis ${normalAxis}`)
   target.physicalWidthInMeters = markWidth
@@ -147,7 +151,6 @@ async function prepare() {
   const pinch = createPinchScale({ maxScale: MAX_SCALE })
   const swipe = createStrokeTracker()
   const screenPinch = createScreenPinch({ max: MAX_SCALE })
-  const carry = createCarry()
   const reach = createReach()
   const smoother = createPoseSmoother({ rate: POSE_SMOOTHING })
 
@@ -164,8 +167,12 @@ async function prepare() {
 
   let anchor = null
   let frame = null
-  let carrier = null
-  let circle = null
+  // One entry per cat on the card: its own carry, its own circle on screen, and
+  // how far away it is, which is what decides who a finger has hold of.
+  const cats = []
+  let holding = null
+  let hovered = null
+  let swipeTarget = null
   let span = markWidth
   let normalColumn = 1
   let normalSign = 1
@@ -209,6 +216,35 @@ async function prepare() {
     markScale.setScalar(span)
     markPose.compose(markPosition, markRotation, markScale)
     tracked = true
+  }
+
+  /** Stands another cat on the mark, if there is room for one. */
+  function addCat() {
+    if (!frame || cats.length >= MAX_CATS) return null
+    const cat = catalogue.create()
+    cat.heading = heading
+    cat.applyClipping(clipPlane)
+
+    const carrier = new THREE.Group()
+    carrier.add(cat.group)
+    frame.add(carrier)
+
+    const entry = { cat, carrier, carry: createCarry({ limit: CARRY_LIMIT }), circle: null, depth: 0 }
+    cats.push(entry)
+    cat.reveal()
+    say(`cat ${cats.length} of ${MAX_CATS}`)
+    return entry
+  }
+
+  /** Whichever cat a point on screen has landed on, nearest one first. */
+  function catUnder(point) {
+    if (!point) return null
+    let best = null
+    for (const entry of cats) {
+      if (!isTouching(point, entry.circle)) continue
+      if (!best || entry.depth < best.depth) best = entry
+    }
+    return best
   }
 
   /** Degrees the raw camera frame is turned by to match the display. */
@@ -268,12 +304,12 @@ async function prepare() {
   // --- touch --------------------------------------------------------------
 
   /** Turns a swept angle into rotation about the mark's normal. */
-  function spinBy(swept) {
-    if (!swept || !anchor) return
+  function spinBy(entry, swept) {
+    if (!swept || !entry || !anchor) return
     const { camera } = XR8.Threejs.xrScene()
     toCamera.subVectors(camera.position, objectPosition)
     const facing = markNormal.dot(toCamera) > 0 ? -1 : 1
-    cat.spin(swept * facing * SPIN_GAIN)
+    entry.cat.spin(swept * facing * SPIN_GAIN)
   }
 
   const stopSwipe = () => {
@@ -294,7 +330,9 @@ async function prepare() {
       screenPinch.begin(...pair())
       return
     }
-    if (pointers.size > 2 || !isTouching(point, circle)) return
+    if (pointers.size > 2) return
+    swipeTarget = catUnder(point)
+    if (!swipeTarget) return
     swiping = true
     swipe.update({ point, touching: true })
   })
@@ -304,7 +342,8 @@ async function prepare() {
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
 
     if (screenPinching && pointers.size >= 2) {
-      cat.setSize(screenPinch.update(...pair()))
+      const size = screenPinch.update(...pair())
+      cats.forEach((entry) => entry.cat.setSize(size))
       return
     }
     if (!swiping) return
@@ -312,7 +351,7 @@ async function prepare() {
       point: { x: event.clientX, y: event.clientY },
       touching: true,
     })
-    spinBy(swirlAngle(from, to, circle))
+    spinBy(swipeTarget, swirlAngle(from, to, swipeTarget?.circle))
   })
 
   const liftPointer = (event) => {
@@ -321,7 +360,10 @@ async function prepare() {
       screenPinching = false
       screenPinch.end()
     }
-    if (pointers.size === 0) stopSwipe()
+    if (pointers.size === 0) {
+      stopSwipe()
+      swipeTarget = null
+    }
   }
   document.addEventListener('pointerup', liftPointer)
   document.addEventListener('pointercancel', liftPointer)
@@ -331,7 +373,8 @@ async function prepare() {
   window.addEventListener('pagehide', () => {
     handTracker?.close()
     overlay.dispose()
-    cat.dispose()
+    cats.forEach((entry) => entry.cat.dispose())
+    catalogue.dispose()
     XR8.stop()
   })
 
@@ -383,7 +426,6 @@ async function prepare() {
             // The model climbs out from under the card, so whatever is still below
             // the mark's plane must not be drawn.
             renderer.localClippingEnabled = true
-            cat.applyClipping(clipPlane)
 
             hint.hidden = false
             say('pipeline start')
@@ -438,12 +480,24 @@ async function prepare() {
             objectPosition.setFromMatrixPosition(anchor.matrixWorld)
             clipPlane.setFromNormalAndCoplanarPoint(markNormal, objectPosition)
 
-            cat.group.updateMatrixWorld(true)
-            worldScale.setFromMatrixColumn(cat.group.matrixWorld, 0)
-            circle = screenCircle(cat.group, camera, cat.radius * worldScale.length(), {
-              width: window.innerWidth,
-              height: window.innerHeight,
-            })
+            const viewport = { width: window.innerWidth, height: window.innerHeight }
+            for (const entry of cats) {
+              const { x, y, z } = entry.carry.update(delta)
+              entry.carrier.position.set(x, y, z)
+              entry.cat.group.updateMatrixWorld(true)
+              worldScale.setFromMatrixColumn(entry.cat.group.matrixWorld, 0)
+              entry.circle = screenCircle(
+                entry.cat.group,
+                camera,
+                entry.cat.radius * worldScale.length(),
+                viewport,
+              )
+              entry.depth = objectPosition
+                .setFromMatrixPosition(entry.cat.group.matrixWorld)
+                .distanceTo(camera.position)
+            }
+            // Reused above; put back what the clipping plane is measured from.
+            objectPosition.setFromMatrixPosition(anchor.matrixWorld)
 
             if (handTracker && frames++ % DETECT_EVERY === 0) {
               const pixels = processGpuResult?.camerapixelarray
@@ -457,33 +511,44 @@ async function prepare() {
                 })
                 const point = landmarks ? fingertip(landmarks, rect) : null
                 handSeen = Boolean(landmarks)
-                touching = isTouching(point, circle)
+                hovered = catUnder(point)
+                touching = Boolean(hovered)
 
                 const sinceDetect = lastDetectAt ? (now - lastDetectAt) / 1000 : 0
                 lastDetectAt = now
-                // A hand pinch is how the model is picked up, so it no longer
-                // resizes it; two fingers on the glass still do.
+                // A hand pinch is how a cat is picked up, so it no longer
+                // resizes anything; two fingers on the glass still do.
                 const { closed, speed } = pinch.update(landmarks, sinceDetect)
                 pinched = closed
 
-                const held = carry.held
-                const grabbing = point && (held ? closed : closed && touching)
-                const grip = grabbing
-                  ? reach.at(point, {
-                      camera,
-                      frame,
-                      card: clipPlane,
-                      height: carry.position.z,
-                      unit: span,
-                      viewport: { width: window.innerWidth, height: window.innerHeight },
-                    })
-                  : null
-
                 if (!closed) {
-                  carry.release()
-                } else if (grip) {
-                  if (held) carry.moveTo(grip)
-                  else carry.grab(grip)
+                  if (holding) {
+                    holding.carry.release()
+                    // Carried clear of the card and set down: the mark has room
+                    // to produce another.
+                    const { x, y } = holding.carry.position
+                    if (Math.hypot(x, y) >= SPAWN_DISTANCE) addCat()
+                    holding = null
+                  }
+                } else {
+                  const target = holding ?? hovered
+                  const grip = target && point
+                    ? reach.at(point, {
+                        camera,
+                        frame,
+                        card: clipPlane,
+                        height: target.carry.position.z,
+                        unit: span,
+                        viewport,
+                      })
+                    : null
+                  if (grip) {
+                    if (holding) target.carry.moveTo(grip)
+                    else {
+                      target.carry.grab(grip)
+                      holding = target
+                    }
+                  }
                 }
 
                 overlay.draw(landmarks, rect, { touching, pinched })
@@ -502,15 +567,15 @@ async function prepare() {
               }
             }
 
-            // The carried offset rides its own group, so the model's own rise
-            // out of the card and its spin are left entirely alone.
-            if (carrier) {
-              const { x, y, z } = carry.update(delta)
-              carrier.position.set(x, y, z)
+            for (const entry of cats) {
+              const lit =
+                entry === holding ||
+                entry === hovered ||
+                (swiping && entry === swipeTarget) ||
+                screenPinching
+              entry.cat.setHighlight(lit ? 1 : 0)
+              entry.cat.update(delta)
             }
-
-            cat.setHighlight(touching || carry.held || swiping || screenPinching ? 1 : 0)
-            cat.update(delta)
 
             if (debugging) {
               readout = [
@@ -522,10 +587,11 @@ async function prepare() {
                 `swipe   ${swiping ? 'YES' : screenPinching ? 'PINCH' : 'no'}`,
                 `touch   ${touching ? 'YES' : 'no'}`,
                 `carry   ${carry.held ? 'HELD' : 'free'} ${carry.position.x.toFixed(1)},${carry.position.y.toFixed(1)},${carry.position.z.toFixed(2)}`,
-                `turn    ${cat.turn}deg`,
+                `cats    ${cats.length}/${MAX_CATS} ${holding ? 'CARRYING' : 'free'}`,
+                `out     ${cats.map((e) => Math.hypot(e.carry.position.x, e.carry.position.y).toFixed(1)).join(' ')}`,
                 `track   ${status}`,
                 `fps     ${fps.toFixed(0)}`,
-                `object  ${circle ? `${circle.x.toFixed(0)},${circle.y.toFixed(0)} r${circle.r.toFixed(0)}` : '-'}`,
+                `object  ${hovered?.circle ? `${hovered.circle.x.toFixed(0)},${hovered.circle.y.toFixed(0)} r${hovered.circle.r.toFixed(0)}` : '-'}`,
               ]
               paint()
             }
@@ -571,11 +637,6 @@ async function prepare() {
                 // Laid onto the card's normal once that has been measured, just
                 // below.
                 frame = new THREE.Group()
-                // Where a carried model is held. Keeping it off the model's own
-                // group leaves the rise out of the card to work as it always did.
-                carrier = new THREE.Group()
-                carrier.add(cat.group)
-                frame.add(carrier)
                 anchor.add(frame)
                 scene.add(anchor)
 
@@ -612,7 +673,7 @@ async function prepare() {
                 say(`lean ${lean.map((v) => v.toFixed(2)).join(' ')}`,
                     `| normal ${'xyz'[normalColumn]}${normalSign < 0 ? '-' : '+'}`)
 
-                cat.reveal()
+                addCat()
                 hint.classList.add('is-found')
                 hintText.textContent = 'Swipe it to turn'
               },
