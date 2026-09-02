@@ -47,6 +47,16 @@ const debugging = params.has('debug')
 const markWidth = Number(params.get('w')) || MARK_WIDTH
 const modelSize = Number(params.get('s')) || MODEL_SIZE
 const turnOverride = params.get('rot')
+// Which of the image target's own axes points out of the card, and which way
+// along it. Assuming either has not worked: recovering a plane's pose from what
+// a camera sees admits two solutions that are mirror images through the card, so
+// the normal can come back pointing into the desk — which buries the model under
+// its own clipping plane instead of standing it on the print. Measured at
+// placement instead, and only overridden by hand for testing.
+const normalAxis = (params.get('axis') ?? 'auto').toLowerCase()
+const COLUMN = { x: 0, y: 1, z: 2 }
+const heading = Number(params.get('spin')) || 0
+const UP = new THREE.Vector3(0, 0, 1)
 
 const intro = document.querySelector('#intro')
 const startButton = document.querySelector('#start')
@@ -119,7 +129,9 @@ async function prepare() {
     fetch(TARGET_URL).then((response) => response.json()),
     loadCatModel({ size: modelSize }),
   ])
-  say(`target & model ready | w ${(markWidth * 1000).toFixed(0)}mm | s ${modelSize}x`)
+  cat.heading = heading
+  say(`target & model ready | w ${(markWidth * 1000).toFixed(0)}mm | s ${modelSize}x`,
+      `| axis ${normalAxis}`)
   target.physicalWidthInMeters = markWidth
   // The card is what the room is measured from, not something to keep chasing.
   target.moveable = false
@@ -152,6 +164,8 @@ async function prepare() {
   let carrier = null
   let circle = null
   let span = markWidth
+  let normalColumn = 1
+  let normalSign = 1
   let tracked = false
   let sightings = 0
   let aspect = 0
@@ -414,7 +428,10 @@ async function prepare() {
             if (tracked) anchor.matrix.copy(smoother.follow(markPose, delta))
             anchor.matrixWorldNeedsUpdate = true
             anchor.updateMatrixWorld(true)
-            markNormal.setFromMatrixColumn(anchor.matrixWorld, 1).normalize()
+            markNormal
+              .setFromMatrixColumn(anchor.matrixWorld, normalColumn)
+              .normalize()
+              .multiplyScalar(normalSign)
             objectPosition.setFromMatrixPosition(anchor.matrixWorld)
             clipPlane.setFromNormalAndCoplanarPoint(markNormal, objectPosition)
 
@@ -548,10 +565,9 @@ async function prepare() {
                 anchor.matrixAutoUpdate = false
                 anchor.matrix.copy(markPose)
 
-                // The model stands on a mark whose normal is +Z; an 8th Wall image
-                // target lies in the XZ plane, so the assembly is laid back.
+                // Laid onto the card's normal once that has been measured, just
+                // below.
                 frame = new THREE.Group()
-                frame.rotation.x = -Math.PI / 2
                 // Where a carried model is held. Keeping it off the model's own
                 // group leaves the rise out of the card to work as it always did.
                 carrier = new THREE.Group()
@@ -559,6 +575,36 @@ async function prepare() {
                 frame.add(carrier)
                 anchor.add(frame)
                 scene.add(anchor)
+
+                // The card is being looked at, or it could not have been found:
+                // its normal is the axis leaning nearest the camera, pointing
+                // the way the camera is.
+                anchor.updateMatrixWorld(true)
+                const { camera } = XR8.Threejs.xrScene()
+                const here = new THREE.Vector3().setFromMatrixPosition(anchor.matrixWorld)
+                const toCamera = new THREE.Vector3().subVectors(camera.position, here).normalize()
+                const lean = [0, 1, 2].map((column) =>
+                  new THREE.Vector3()
+                    .setFromMatrixColumn(anchor.matrixWorld, column)
+                    .normalize()
+                    .dot(toCamera),
+                )
+
+                normalColumn = COLUMN[normalAxis] ?? lean.reduce(
+                  (best, value, column) => (Math.abs(value) > Math.abs(lean[best]) ? column : best),
+                  0,
+                )
+                normalSign = lean[normalColumn] < 0 ? -1 : 1
+
+                // The model's own +Z is up out of the card, so the frame turns
+                // to put it on the normal we just measured.
+                frame.quaternion.setFromUnitVectors(
+                  UP,
+                  new THREE.Vector3().setComponent(normalColumn, normalSign),
+                )
+
+                say(`lean ${lean.map((v) => v.toFixed(2)).join(' ')}`,
+                    `| normal ${'xyz'[normalColumn]}${normalSign < 0 ? '-' : '+'}`)
 
                 cat.reveal()
                 hint.classList.add('is-found')
