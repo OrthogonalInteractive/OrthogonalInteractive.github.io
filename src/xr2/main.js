@@ -4,6 +4,7 @@ import { fingertip, isTouching, screenCircle } from '../xr/contact.js'
 import { createHandOverlay } from '../xr/handOverlay.js'
 import { HAND_ASSETS, HAND_CACHE, createAssetStore, installAssetWorker } from '../xr/handAssets.js'
 import { createPinchScale } from '../xr/pinchScale.js'
+import { createPoseSmoother } from '../xr/poseSmoother.js'
 import { createScreenPinch } from '../xr/screenPinch.js'
 import { createStrokeTracker } from '../xr/stroke.js'
 import { swirlAngle } from '../xr/swirl.js'
@@ -28,6 +29,10 @@ const MODEL_SIZE = 1.5
 // The printed mark on the business card, in metres. Absolute scale needs a real
 // measurement: monocular SLAM has no size of its own.
 const MARK_WIDTH = 0.024
+
+// How quickly the mark's pose is taken up, per second. The tracker's estimate
+// moves about; following it directly is what makes the model judder.
+const POSE_SMOOTHING = 9
 
 const MAX_SCALE = 2.5
 const SPIN_GAIN = 1
@@ -129,6 +134,7 @@ async function prepare() {
   const screenPinch = createScreenPinch({ max: MAX_SCALE })
   const carry = createCarry()
   const reach = createReach()
+  const smoother = createPoseSmoother({ rate: POSE_SMOOTHING })
 
   const clock = new THREE.Clock()
   const clipPlane = new THREE.Plane()
@@ -136,14 +142,19 @@ async function prepare() {
   const objectPosition = new THREE.Vector3()
   const toCamera = new THREE.Vector3()
   const worldScale = new THREE.Vector3()
+  const markPose = new THREE.Matrix4()
+  const markPosition = new THREE.Vector3()
+  const markRotation = new THREE.Quaternion()
+  const markScale = new THREE.Vector3()
 
   let anchor = null
   let frame = null
   let carrier = null
   let circle = null
   let span = markWidth
+  let tracked = false
+  let sightings = 0
   let uiOrientation = 0
-  let pixelModuleAdded = false
   let status = '-'
 
   let handTracker = null
@@ -160,6 +171,24 @@ async function prepare() {
   let fps = 0
   let fpsAt = performance.now()
   let fpsFrames = 0
+
+  /**
+   * Takes the mark's latest reported pose.
+   *
+   * A first sighting can be a poor one — grazing, blurred, half in frame — and
+   * its estimate can be tilted well off the card. Keeping the anchor on the
+   * mark for as long as the mark is visible lets a bad first look correct
+   * itself; freezing on loss is what leaves the model standing in the room.
+   */
+  function noteMark(detail) {
+    sightings += 1
+    span = markerSpan(detail, markWidth)
+    markPosition.copy(detail.position)
+    markRotation.copy(detail.rotation)
+    markScale.setScalar(span)
+    markPose.compose(markPosition, markRotation, markScale)
+    tracked = true
+  }
 
   /** Degrees the raw camera frame is turned by to match the display. */
   const frameTurn = () => (turnOverride !== null ? Number(turnOverride) : -uiOrientation)
@@ -378,6 +407,8 @@ async function prepare() {
 
             // The card's plane, in world space: the clip that hides the buried part
             // of the model, and the axis every stroke turns it about.
+            if (tracked) anchor.matrix.copy(smoother.follow(markPose, delta))
+            anchor.matrixWorldNeedsUpdate = true
             anchor.updateMatrixWorld(true)
             markNormal.setFromMatrixColumn(anchor.matrixWorld, 1).normalize()
             objectPosition.setFromMatrixPosition(anchor.matrixWorld)
@@ -461,6 +492,7 @@ async function prepare() {
               readout = [
                 ...handReadout,
                 `mark    ${(span * 1000).toFixed(1)}u (declared ${(markWidth * 1000).toFixed(0)})`,
+                `sight   ${sightings} ${tracked ? 'TRACKED' : 'held'}`,
                 `size    ${modelSize}x mark`,
                 `swipe   ${swiping ? 'YES' : screenPinching ? 'PINCH' : 'no'}`,
                 `touch   ${touching ? 'YES' : 'no'}`,
@@ -476,6 +508,17 @@ async function prepare() {
 
           listeners: [
             {
+              event: 'reality.imageupdated',
+              process: ({ detail }) => noteMark(detail),
+            },
+            {
+              event: 'reality.imagelost',
+              // Frozen where it was last seen, and held there by SLAM.
+              process: () => {
+                tracked = false
+              },
+            },
+            {
               event: 'reality.imagescanning',
               process: () => {
                 if (!anchor) hintText.textContent = 'Looking for the mark'
@@ -484,19 +527,21 @@ async function prepare() {
             {
               event: 'reality.imagefound',
               process: ({ detail }) => {
-                // Placed once and left alone. SLAM holds the pose from here, so a
-                // second sighting must not move what is already standing there.
-                if (anchor) return
+                const first = !anchor
+                noteMark(detail)
+                // Only the very first sighting is taken whole; a re-acquisition
+                // eases across so the model does not jump where SLAM has drifted.
+                if (first) smoother.reset()
+                if (!first) return
 
                 const { scene } = XR8.Threejs.xrScene()
-                span = markerSpan(detail, markWidth)
-
                 anchor = new THREE.Group()
-                anchor.position.copy(detail.position)
-                anchor.quaternion.copy(detail.rotation)
                 // One anchor unit is one mark width, which is what the model was
                 // fitted against — the same footing a MindAR anchor gives it.
-                anchor.scale.setScalar(span)
+                // The pose is written straight onto the matrix each frame, so
+                // the first one goes on now rather than a frame late at origin.
+                anchor.matrixAutoUpdate = false
+                anchor.matrix.copy(markPose)
 
                 // The model stands on a mark whose normal is +Z; an 8th Wall image
                 // target lies in the XZ plane, so the assembly is laid back.
