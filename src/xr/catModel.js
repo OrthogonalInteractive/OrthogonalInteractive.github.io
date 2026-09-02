@@ -49,6 +49,7 @@ export async function loadFigureFactory({
   glow = 1,
   sequence = false,
   order = [],
+  skip = [],
   slot = SLOT_SECONDS,
   fade = FADE_SECONDS,
   pinRoot = false,
@@ -87,7 +88,7 @@ export async function loadFigureFactory({
     create: ({ tint } = {}) =>
       build({
         gltf, template, box, scale, z, radius,
-        tint, glow, sequence, order, slot, fade, emerge,
+        tint, glow, sequence, order, skip, slot, fade, emerge,
       }),
 
     /** The geometry and textures every copy shares. */
@@ -117,7 +118,7 @@ export async function loadCatModel(options) {
 
 function build({
   gltf, template, box, scale, z, radius,
-  tint, glow = 1, sequence, order, slot, fade, emerge = true,
+  tint, glow = 1, sequence, order, skip, slot, fade, emerge = true,
 }) {
   const shade = new THREE.Color(tint ?? 0xffffff)
   const rest = EMISSIVE_REST * glow
@@ -172,7 +173,7 @@ function build({
     sequence && actions.length > 1
       ? createSequence(
           gltf.animations.map((clip) => ({ name: clip.name, duration: clip.duration })),
-          { target: slot, order },
+          { target: slot, order, skip },
         )
       : null
   let playing = null

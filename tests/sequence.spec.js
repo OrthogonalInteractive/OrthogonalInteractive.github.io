@@ -93,6 +93,23 @@ describe('createSequence', () => {
     expect(order.plan).toHaveLength(CLIPS.length)
   })
 
+  it('leaves out a clip it is told to skip', () => {
+    const order = createSequence(CLIPS, { target: 5, skip: ['Backflip'] })
+
+    expect(order.plan.map((item) => item.name)).not.toContain('Backflip')
+    expect(order.plan).toHaveLength(CLIPS.length - 1)
+  })
+
+  it('skips a clip even when the order still names it', () => {
+    const order = createSequence(CLIPS, {
+      target: 5,
+      order: ['Backflip', 'Walking'],
+      skip: ['Backflip'],
+    })
+
+    expect(order.current.name).toBe('Walking')
+  })
+
   it('has nowhere to go with a single clip', () => {
     const order = createSequence([CLIPS[0]], { target: 5 })
     expect(order.update(100)).toBeNull()

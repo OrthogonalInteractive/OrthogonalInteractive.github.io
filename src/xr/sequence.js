@@ -18,10 +18,15 @@ export function wholeLoops(duration, target) {
  * small difference between where one clip leaves the body and where the next
  * picks it up, never a large one, so which clip follows which is worth choosing
  * — see tools/order-clips.mjs, which measures it. Anything the model has and
- * the order does not name still gets played, behind the ones that were named.
+ * the order does not name still gets played, behind the ones that were named,
+ * so that a mistyped name loses its place rather than the whole clip.
+ *
+ * `skip` is the other thing: a clip that is not wanted at all.
  */
-export function createSequence(clips, { target = 5, order = [] } = {}) {
-  const numbered = clips.map((clip, index) => ({ ...clip, index }))
+export function createSequence(clips, { target = 5, order = [], skip = [] } = {}) {
+  const numbered = clips
+    .map((clip, index) => ({ ...clip, index }))
+    .filter((clip) => !skip.includes(clip.name))
   const named = order
     .map((name) => numbered.find((clip) => clip.name === name))
     .filter(Boolean)

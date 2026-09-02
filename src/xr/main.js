@@ -58,7 +58,6 @@ const FIGURE_HEIGHT = 6.3
 // so its two are the ones that show.
 const FIGURE_ORDER = [
   'Backflip',
-  'Knock_Down',
   'Stumble_Walk',
   'Run_to_Walk_Transition',
   'Running',
@@ -66,14 +65,18 @@ const FIGURE_ORDER = [
   'Hello_Run',
   'penguin_walk',
   'Wave_for_Help_1',
-  'Walking',
-  'ymca_dance',
   'Handstand_Flip',
+  'ymca_dance',
   'Lunge_Roundhouse_Kick',
   'Stand_Up1',
   'CrouchLookAroundBow',
   'Crouch_and_Push_Forward',
+  'Walking',
 ]
+
+// Knock_Down throws the figure over backwards and a metre off its feet, which
+// on a business card is the figure leaving.
+const FIGURE_SKIP = ['Knock_Down']
 
 // Its light is real rather than painted on, so it wants far less of itself fed
 // back as emission than the cat does.
@@ -215,6 +218,7 @@ async function prepare() {
       // walks the model off its spot unless the travel is taken out.
       sequence: true,
       order: FIGURE_ORDER,
+      skip: FIGURE_SKIP,
       pinRoot: true,
       // It arrives by flipping onto the card, so it has no need to climb out
       // of it first.
