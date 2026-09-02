@@ -96,17 +96,20 @@ const hand = document.querySelector('#hand')
 const handNote = document.querySelector('#hand-note')
 const handClear = document.querySelector('#hand-clear')
 const debugPanel = document.querySelector('#debug')
+const guide = document.querySelector('#guide')
+const guideHand = document.querySelector('#guide-hand')
 
 const assets = createAssetStore({ urls: HAND_ASSETS, cacheName: HAND_CACHE })
 
-// Every failure so far has been invisible from the phone that hit it, which is
-// the only place this page runs. The stage log is on by default for that
-// reason; ?debug adds the per-frame numbers underneath it.
+// Every failure here is invisible from the phone that hit it, which is the only
+// place this page runs, so the stages are always recorded — ?debug is what puts
+// them, and the per-frame numbers, on screen.
 const stages = []
 let readout = []
-debugPanel.hidden = false
+debugPanel.hidden = !debugging
 
 function paint() {
+  if (!debugging) return
   debugPanel.textContent = [...stages.slice(-12), ...readout].join('\n')
 }
 
@@ -130,6 +133,27 @@ window.addEventListener('unhandledrejection', (event) => {
   say('REJECTED:', event.reason?.message ?? event.reason)
   setNote(`エラー: ${event.reason?.message ?? event.reason}`, true)
 })
+
+// Long enough to read once, and gone the moment it has been acted on.
+const GUIDE_SECONDS = 16
+let guideTimer = 0
+let guideDone = false
+
+function showGuide() {
+  if (guideDone) return
+  guide.hidden = false
+  clearTimeout(guideTimer)
+  guideTimer = setTimeout(hideGuide, GUIDE_SECONDS * 1000)
+}
+
+function hideGuide() {
+  if (guideDone) return
+  guideDone = true
+  clearTimeout(guideTimer)
+  guide.classList.add('is-gone')
+}
+
+document.querySelector('#guide-close').addEventListener('click', hideGuide)
 
 /** The engine and its helpers arrive as async scripts, each with its own event. */
 function waitFor(name, event) {
@@ -314,11 +338,11 @@ async function prepare() {
 
   async function showCacheState() {
     if (!assets.available) {
-      handNote.textContent = 'Hand control on'
+      handNote.textContent = '手で操作できます'
       return
     }
     const cached = await assets.isCached()
-    handNote.textContent = cached ? 'Hand control on — 19 MB cached' : 'Hand control on'
+    handNote.textContent = cached ? '手で操作できます（19MB 保存済み）' : '手で操作できます'
     handClear.hidden = !cached
   }
 
@@ -327,7 +351,7 @@ async function prepare() {
     await assets.clear()
     handClear.hidden = true
     handClear.disabled = false
-    handNote.textContent = 'Cache cleared — downloads again next visit'
+    handNote.textContent = 'キャッシュを削除しました。次回また読み込みます'
   })
 
   /**
@@ -341,10 +365,12 @@ async function prepare() {
       // own registration even though the assets it serves live under /xr/.
       await installAssetWorker('/xr2/sw.js', '/xr2/')
       await assets.download((ratio) => {
-        handNote.textContent = `Hand control — downloading ${Math.round(ratio * 100)}%`
+        const percent = Math.round(ratio * 100)
+        handNote.textContent = `ハンドトラッキングを読み込み中 ${percent}%`
+        guideHand.textContent = `ハンドトラッキングを読み込み中 ${percent}%`
       })
 
-      handNote.textContent = 'Hand control — starting'
+      handNote.textContent = 'ハンドトラッキングを起動しています'
       const { loadHandTracker } = await import('../xr/handControl.js')
       handTracker = await loadHandTracker()
 
@@ -354,10 +380,12 @@ async function prepare() {
         XR8.CameraPixelArray.pipelineModule({ maxDimension: HAND_FRAME }),
       )
       say('hand control ready')
+      guideHand.hidden = true
       await showCacheState()
     } catch (error) {
       say('hand control failed:', error?.message ?? error)
-      handNote.textContent = `Hand control unavailable: ${error?.message ?? error}`
+      handNote.textContent = `ハンドトラッキングを利用できません: ${error?.message ?? error}`
+      guideHand.textContent = '手での操作は利用できません。画面の操作はできます。'
     }
   }
 
@@ -616,6 +644,8 @@ async function prepare() {
                     else {
                       target.carry.grab(grip)
                       holding = target
+                      // Read once, acted on once.
+                      hideGuide()
                     }
                   }
                 }
@@ -623,10 +653,10 @@ async function prepare() {
                 overlay.draw(landmarks, rect, { touching, pinched })
                 hint.classList.toggle('is-found', touching || Boolean(holding))
                 hintText.textContent = holding
-                  ? 'Let go to drop it'
+                  ? '指を放すと置けます'
                   : touching
-                    ? 'Pinch to pick it up'
-                    : 'Swipe it to turn'
+                    ? 'つまむと持ち上がります'
+                    : 'なぞると回転します'
                 handReadout = [
                   `hand    ${landmarks ? 'yes' : 'no'}`,
                   `pinch   ${closed ? 'CLOSED' : 'open'}`,
@@ -682,7 +712,7 @@ async function prepare() {
             {
               event: 'reality.imagescanning',
               process: () => {
-                if (!anchor) hintText.textContent = 'Looking for the mark'
+                if (!anchor) hintText.textContent = 'マークを探しています'
               },
             },
             {
@@ -745,7 +775,8 @@ async function prepare() {
 
                 addCat()
                 hint.classList.add('is-found')
-                hintText.textContent = 'Swipe it to turn'
+                showGuide()
+                hintText.textContent = 'なぞると回転します'
               },
             },
           ],
