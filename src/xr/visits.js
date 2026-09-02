@@ -35,3 +35,14 @@ export async function countVisit({ config, id, connect }) {
     return null
   }
 }
+
+/** The tally as it stands, and this phone's share of it. Null if unreadable. */
+export async function readVisits({ config, id, connect }) {
+  if (!config || !id) return null
+  try {
+    const log = await connect(config)
+    return await log.read(id)
+  } catch {
+    return null
+  }
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { countVisit, readConfig } from '../src/xr/visits.js'
+import { countVisit, readConfig, readVisits } from '../src/xr/visits.js'
 
 const CONFIG = { apiKey: 'k', projectId: 'p' }
 
@@ -51,5 +51,33 @@ describe('countVisit', () => {
   it('gives up quietly when the write is refused', async () => {
     const connect = log(vi.fn().mockRejectedValue(new Error('permission-denied')))
     expect(await countVisit({ config: CONFIG, id: 'abc', connect })).toBeNull()
+  })
+})
+
+describe('readVisits', () => {
+  const log = (read) => vi.fn().mockResolvedValue({ read })
+
+  it('brings back the tally and this phone share of it', async () => {
+    const read = vi.fn().mockResolvedValue({ total: 40, unique: 12, mine: 3 })
+    const connect = log(read)
+
+    expect(await readVisits({ config: CONFIG, id: 'abc', connect }))
+      .toEqual({ total: 40, unique: 12, mine: 3 })
+    expect(read).toHaveBeenCalledWith('abc')
+  })
+
+  it('has nothing to bring back when nothing is being counted', async () => {
+    const connect = log(vi.fn())
+    expect(await readVisits({ config: null, id: 'abc', connect })).toBeNull()
+    expect(connect).not.toHaveBeenCalled()
+  })
+
+  it('says nothing rather than throwing when it cannot be reached', async () => {
+    expect(await readVisits({
+      config: CONFIG, id: 'abc', connect: vi.fn().mockRejectedValue(new Error('offline')),
+    })).toBeNull()
+    expect(await readVisits({
+      config: CONFIG, id: 'abc', connect: log(vi.fn().mockRejectedValue(new Error('denied'))),
+    })).toBeNull()
   })
 })

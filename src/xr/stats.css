@@ -1,0 +1,85 @@
+@import '../style.css';
+
+.stats {
+  display: grid;
+  gap: 2rem;
+  width: min(34rem, 100% - 3rem);
+  margin-inline: auto;
+  padding: clamp(3rem, 12vh, 6rem) 0;
+}
+
+.stats__title {
+  margin: 0;
+  font-size: clamp(1.4rem, 5vw, 1.9rem);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.stats__figures {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+
+.stats__figure {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem 1.3rem;
+  background: var(--ink-800);
+}
+
+.stats__figure dt {
+  font-size: 0.82rem;
+  color: var(--fg-muted);
+}
+
+.stats__figure dd {
+  margin: 0;
+}
+
+.stats__number {
+  font-family: var(--font-mono);
+  font-size: 1.6rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+
+/* The one number the person reading this page is actually in. */
+.stats__figure--mine .stats__number {
+  color: var(--cyan);
+}
+
+.stats__note {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: var(--fg-muted);
+}
+
+.stats__note.is-quiet {
+  color: var(--fg-faint);
+}
+
+.stats__note.is-error {
+  color: var(--warn, #e2574c);
+}
+
+.stats__small {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.8;
+  color: var(--fg-faint);
+}
+
+.stats__back {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+}

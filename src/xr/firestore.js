@@ -2,7 +2,13 @@
 // largest thing on the page after the model — is only fetched when the build
 // actually has somewhere to write to, and only after the camera is running.
 
-/** Opens the tally. `record` returns the counts as they stand after the visit. */
+/**
+ * Opens the tally.
+ *
+ * `record` adds a visit and returns the counts as they stand after it; `read`
+ * only looks, which is what the statistics page does — reading the numbers is
+ * not itself a visit to the card.
+ */
 export async function connectVisitLog(config) {
   const [{ initializeApp }, store] = await Promise.all([
     import('firebase/app'),
@@ -41,6 +47,21 @@ export async function connectVisitLog(config) {
 
         return { total, unique, first }
       })
+    },
+
+    async read(id) {
+      const [tally, seen] = await Promise.all([
+        store.getDoc(totals),
+        store.getDoc(store.doc(db, 'visitors', id)),
+      ])
+      const mine = seen.data()
+      return {
+        total: tally.data()?.total ?? 0,
+        unique: tally.data()?.unique ?? 0,
+        mine: mine?.visits ?? 0,
+        first: mine?.first?.toDate?.() ?? null,
+        last: mine?.last?.toDate?.() ?? null,
+      }
     },
   }
 }
