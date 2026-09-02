@@ -41,9 +41,11 @@ body {
   pointer-events: none;
 }
 
+/* Above the engine's own overlays (820), which would otherwise bury the one
+   readout that says why nothing started. */
 .debug {
   position: fixed;
-  z-index: 11;
+  z-index: 900;
   top: max(1rem, env(safe-area-inset-top));
   left: max(1rem, env(safe-area-inset-left));
   margin: 0;

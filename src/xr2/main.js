@@ -53,6 +53,22 @@ const debugPanel = document.querySelector('#debug')
 
 const assets = createAssetStore({ urls: HAND_ASSETS, cacheName: HAND_CACHE })
 
+// Every failure so far has been invisible from the phone that hit it, which is
+// the only place this page runs. The stage log is on by default for that
+// reason; ?debug adds the per-frame numbers underneath it.
+const stages = []
+let readout = []
+debugPanel.hidden = false
+
+function paint() {
+  debugPanel.textContent = [...stages.slice(-12), ...readout].join('\n')
+}
+
+function say(...parts) {
+  stages.push(parts.join(' '))
+  paint()
+}
+
 function setNote(message, isError = false) {
   note.textContent = message
   note.classList.toggle('is-error', isError)
@@ -60,10 +76,14 @@ function setNote(message, isError = false) {
 
 // Without these a failure anywhere in setup shows only as a button that does
 // nothing at all.
-window.addEventListener('error', (event) => setNote(`エラー: ${event.message}`, true))
-window.addEventListener('unhandledrejection', (event) =>
-  setNote(`エラー: ${event.reason?.message ?? event.reason}`, true),
-)
+window.addEventListener('error', (event) => {
+  say('ERROR:', event.message)
+  setNote(`エラー: ${event.message}`, true)
+})
+window.addEventListener('unhandledrejection', (event) => {
+  say('REJECTED:', event.reason?.message ?? event.reason)
+  setNote(`エラー: ${event.reason?.message ?? event.reason}`, true)
+})
 
 /** The engine and its helpers arrive as async scripts, each with its own event. */
 function waitFor(name, event) {
@@ -76,17 +96,23 @@ function waitFor(name, event) {
 async function prepare() {
   setNote('エンジンを読み込んでいます…')
 
+  const startedAt = performance.now()
   const [XR8] = await Promise.all([
     waitFor('XR8', 'xrloaded'),
     waitFor('XRExtras', 'xrextrasloaded'),
   ])
   const { XRExtras } = window
+  say(`engine ${((performance.now() - startedAt) / 1000).toFixed(1)}s | three ${THREE.REVISION}`)
+  const device = XR8.XrDevice.deviceEstimate()
+  say(`${device.os} ${device.osVersion} / ${device.browser?.name}`,
+      `| compatible ${XR8.XrDevice.isDeviceBrowserCompatible()}`)
 
   setNote('モデルを読み込んでいます…')
   const [target, cat] = await Promise.all([
     fetch(TARGET_URL).then((response) => response.json()),
     loadCatModel({ size: modelSize }),
   ])
+  say(`target & model ready | w ${(markWidth * 1000).toFixed(0)}mm | s ${modelSize}x`)
   target.physicalWidthInMeters = markWidth
   // The card is what the room is measured from, not something to keep chasing.
   target.moveable = false
@@ -297,6 +323,10 @@ async function prepare() {
     () => {
       startButton.disabled = true
       setNote('カメラを起動しています…')
+      // Out of the way at once. The engine puts its own permission and loading
+      // UI up from here, and an opaque panel over it reads as a dead button.
+      intro.classList.add('is-gone')
+      say('XR8.run() …')
 
       XR8.XrController.configure({
         disableWorldTracking: false,
@@ -333,12 +363,12 @@ async function prepare() {
             renderer.localClippingEnabled = true
             cat.applyClipping(clipPlane)
 
-            intro.classList.add('is-gone')
             hint.hidden = false
-            if (debugging) debugPanel.hidden = false
+            say('pipeline start')
           },
 
           onCameraStatusChange: ({ status }) => {
+            say('camera:', status)
             if (status === 'failed') {
               intro.classList.remove('is-gone')
               startButton.disabled = false
@@ -351,7 +381,10 @@ async function prepare() {
             overlay.resize()
           },
 
-          onException: (error) => setNote(`エラー: ${error?.message ?? error}`, true),
+          onException: (error) => {
+            say('EXCEPTION:', error?.message ?? error)
+            setNote(`エラー: ${error?.message ?? error}`, true)
+          },
 
           onUpdate: ({ processGpuResult }) => {
             const delta = clock.getDelta()
@@ -420,7 +453,7 @@ async function prepare() {
             cat.update(delta)
 
             if (debugging) {
-              debugPanel.textContent = [
+              readout = [
                 ...handReadout,
                 `mark    ${(span * 1000).toFixed(1)}u (declared ${(markWidth * 1000).toFixed(0)})`,
                 `size    ${modelSize}x mark`,
@@ -429,7 +462,8 @@ async function prepare() {
                 `turn    ${cat.turn}deg`,
                 `fps     ${fps.toFixed(0)}`,
                 `object  ${circle ? `${circle.x.toFixed(0)},${circle.y.toFixed(0)} r${circle.r.toFixed(0)}` : '-'}`,
-              ].join('\n')
+              ]
+              paint()
             }
           },
 
