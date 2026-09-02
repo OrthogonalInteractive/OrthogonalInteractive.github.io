@@ -140,7 +140,6 @@ async function prepare() {
   let span = markWidth
   let uiOrientation = 0
   let pixelModuleAdded = false
-  let ticks = 0
   let status = '-'
 
   let handTracker = null
@@ -369,20 +368,6 @@ async function prepare() {
             hint.hidden = false
             say('pipeline start')
 
-            // A live camera over a black screen is either a canvas nobody can
-            // see or a renderer wiping the feed before it reaches the glass,
-            // and the only place to tell those apart is the phone it happens on.
-            setTimeout(() => {
-              const style = getComputedStyle(canvas)
-              const drawSize = renderer.getSize(new THREE.Vector2())
-              say(`canvas buf ${canvas.width}x${canvas.height}`,
-                  `css ${canvas.clientWidth}x${canvas.clientHeight}`)
-              say(` ${style.position} z:${style.zIndex} d:${style.display}`,
-                  `o:${style.opacity} fit:${style.objectFit} in:${canvas.parentElement?.id}`)
-              say(` renderer ${drawSize.x}x${drawSize.y} dpr ${renderer.getPixelRatio()}`,
-                  `clear:${renderer.autoClear} own:${renderer.domElement === canvas}`)
-              say(` frames ${ticks} tracking ${status} kids ${scene.children.length}`)
-            }, 2000)
           },
 
           onCameraStatusChange: ({ status }) => {
@@ -394,11 +379,10 @@ async function prepare() {
             }
           },
 
-          onVideoSizeChange: ({ videoWidth, videoHeight, canvasWidth, canvasHeight, orientation }) => {
+          onVideoSizeChange: ({ videoWidth, videoHeight, orientation }) => {
             uiOrientation = orientation
             overlay.resize()
-            say(`video ${videoWidth}x${videoHeight}`,
-                `canvas ${canvasWidth}x${canvasHeight} rot ${orientation}`)
+            say(`video ${videoWidth}x${videoHeight} rot ${orientation}`)
           },
 
           onException: (error) => {
@@ -408,7 +392,6 @@ async function prepare() {
 
           onUpdate: ({ processCpuResult, processGpuResult }) => {
             const delta = clock.getDelta()
-            ticks += 1
             status = processCpuResult?.reality?.trackingStatus ?? '-'
 
             fpsFrames += 1
@@ -482,6 +465,7 @@ async function prepare() {
                 `swipe   ${swiping ? 'YES' : screenPinching ? 'PINCH' : 'no'}`,
                 `touch   ${touching ? 'YES' : 'no'}`,
                 `turn    ${cat.turn}deg`,
+                `track   ${status}`,
                 `fps     ${fps.toFixed(0)}`,
                 `object  ${circle ? `${circle.x.toFixed(0)},${circle.y.toFixed(0)} r${circle.r.toFixed(0)}` : '-'}`,
               ]
