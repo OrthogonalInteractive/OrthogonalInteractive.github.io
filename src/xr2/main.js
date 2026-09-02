@@ -552,8 +552,8 @@ async function prepare() {
                 }
 
                 overlay.draw(landmarks, rect, { touching, pinched })
-                hint.classList.toggle('is-found', touching || carry.held)
-                hintText.textContent = carry.held
+                hint.classList.toggle('is-found', touching || Boolean(holding))
+                hintText.textContent = holding
                   ? 'Let go to drop it'
                   : touching
                     ? 'Pinch to pick it up'
@@ -586,7 +586,6 @@ async function prepare() {
                 `size    ${modelSize}x mark`,
                 `swipe   ${swiping ? 'YES' : screenPinching ? 'PINCH' : 'no'}`,
                 `touch   ${touching ? 'YES' : 'no'}`,
-                `carry   ${carry.held ? 'HELD' : 'free'} ${carry.position.x.toFixed(1)},${carry.position.y.toFixed(1)},${carry.position.z.toFixed(2)}`,
                 `cats    ${cats.length}/${MAX_CATS} ${holding ? 'CARRYING' : 'free'}`,
                 `out     ${cats.map((e) => Math.hypot(e.carry.position.x, e.carry.position.y).toFixed(1)).join(' ')}`,
                 `track   ${status}`,
