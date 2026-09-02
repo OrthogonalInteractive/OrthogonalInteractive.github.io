@@ -9,6 +9,8 @@ import { createScreenPinch } from './screenPinch.js'
 import { createStrokeTracker } from './stroke.js'
 import { swirlAngle } from './swirl.js'
 import { unsupportedReason } from './support.js'
+import { visitorId } from './visitor.js'
+import { countVisit, readConfig } from './visits.js'
 import { createCameraFrame } from './cameraFrame.js'
 import { createCarry } from './carry.js'
 import { headingToward } from './facing.js'
@@ -95,6 +97,10 @@ const DETECT_EVERY = 2
 // Longest side of the frame handed to the hand tracker. Every pixel here is a
 // GPU readback on the render thread, so it stays well below the camera's own.
 const HAND_FRAME = 320
+
+// Absent unless the build was handed a Firebase config, in which case the page
+// counts nothing and reaches for nothing.
+const visitLog = readConfig(import.meta.env.VITE_FIREBASE)
 
 const params = new URLSearchParams(location.search)
 const debugging = params.has('debug')
@@ -564,6 +570,17 @@ async function prepare() {
             hint.hidden = false
             say('pipeline start')
             startHandControl(XR8)
+
+            // After the camera, never before it: a number nobody reads is not
+            // worth a frame of the thing people came for.
+            countVisit({
+              config: visitLog,
+              id: visitorId(),
+              connect: (config) =>
+                import('./firestore.js').then((m) => m.connectVisitLog(config)),
+            }).then((counted) => {
+              if (counted) say(`visit ${counted.total} | unique ${counted.unique}`)
+            })
 
           },
 

@@ -1,0 +1,39 @@
+rules_version = '2';
+
+// The page that writes these is a static one on GitHub Pages: no server, no
+// sign-in, and a config anybody can read out of the bundle. Rules can say what
+// a write may look like, never who is making it — so these hold the shape of
+// the tally and nothing more. Someone determined can still add visits that did
+// not happen. Turn on App Check if that ever matters.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // The public tally. A write may move it on by exactly one visit, and by at
+    // most one new visitor, and may not carry anything else.
+    match /stats/visits {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['total', 'unique'])
+                    && request.resource.data.total == 1
+                    && request.resource.data.unique in [0, 1];
+      allow update: if request.resource.data.keys().hasOnly(['total', 'unique'])
+                    && request.resource.data.total == resource.data.total + 1
+                    && request.resource.data.unique >= resource.data.unique
+                    && request.resource.data.unique <= resource.data.unique + 1;
+      allow delete: if false;
+    }
+
+    // One document per browser, named for the random id that browser made up.
+    // Readable by anyone who knows the id, which in practice is the browser
+    // that chose it; not listable, so the set of them cannot be walked.
+    match /visitors/{id} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if request.resource.data.keys().hasOnly(['first', 'last', 'visits']);
+      allow delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

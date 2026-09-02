@@ -241,3 +241,39 @@ gh repo create OrthogonalInteractive/OrthogonalInteractive.github.io \
 プロジェクトサイト（`.../<repo>/`）に変える場合は `vite.config.js` の
 `base` を `'/<repo>/'` にする。独自ドメインを使う場合は `public/CNAME` を
 追加する。
+
+## アクセス数の計測
+
+`/xr/` が読み込まれるたびに、Firestore の 2 箇所を 1 トランザクションで更新する。
+
+- `stats/visits` — `total`（総アクセス数）と `unique`（ユニーク端末数）
+- `visitors/{id}` — 端末ごとに `first` / `last` / `visits`
+
+`{id}` はブラウザが自分で作って `localStorage` に保存する UUID（`src/xr/visitor.js`）。
+Web ページから読める端末固有 ID は存在しないため、これが上限。**同じ端末でも
+ブラウザが違えば別カウント**、サイトデータを消せばリセットされる。
+
+計測はカメラ起動後に走り、失敗しても握り潰す。ページの動作には一切影響しない。
+
+### 設定
+
+Firebase コンソールで Firestore を有効にした Web アプリを作り、その設定 JSON を
+GitHub の **Settings → Secrets and variables → Actions → Variables** に
+`FIREBASE_CONFIG` という名前で登録する（Secret ではなく Variable。web config は
+ページに埋め込まれる公開情報）。
+
+```json
+{"apiKey":"...","projectId":"...","appId":"..."}
+```
+
+未設定ならビルドは通り、計測だけが無効になる（Firebase の 561 kB も読み込まれない）。
+
+ルールは `firestore.rules`。Firebase CLI から適用する:
+
+```bash
+npx firebase-tools deploy --only firestore:rules --project <projectId>
+```
+
+**制約**: 静的サイトなのでサーバも認証も無く、ルールは「書き込みの形」しか
+検証できない。設定を読み取った第三者が水増しすることは原理的に防げない。
+気になる場合は App Check を有効にする。

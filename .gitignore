@@ -6,3 +6,6 @@ dist
 # Blender working files
 *.blend
 *.blend[0-9]
+
+# Local Firebase config; .env.example shows the shape.
+.env

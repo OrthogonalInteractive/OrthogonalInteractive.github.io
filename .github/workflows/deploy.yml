@@ -29,7 +29,11 @@ jobs:
       # and whose output (public/xr/image-targets/) is committed.
       - run: npm ci --ignore-scripts
       - run: npm test
+      # A repository variable, not a secret: a Firebase web config is readable
+      # in any page that uses it. Unset, and the site simply counts nothing.
       - run: npm run build
+        env:
+          VITE_FIREBASE: ${{ vars.FIREBASE_CONFIG }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
