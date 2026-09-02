@@ -52,12 +52,16 @@ export function restBounds(object) {
  * glTF's own frame, Y up and untouched — see restBounds on why it cannot be
  * measured once the model has been stood up — so X and Z are what rests on the
  * card and Y is the height that has to clear it.
+ *
+ * `along` picks which of those `width` describes. A model that lies down is
+ * sized by what it covers; one that stands up is sized by how tall it is, so
+ * that a change of pose or a wider set of arms does not resize the figure.
  */
-export function fitToMarker(box, { width, hover }) {
+export function fitToMarker(box, { width, hover, along = 'footprint' }) {
   const size = new Vector3()
   box.getSize(size)
   const footprint = Math.max(size.x, size.z) || 1
-  const scale = width / footprint
+  const scale = width / (along === 'height' ? size.y || 1 : footprint)
 
   return {
     scale,

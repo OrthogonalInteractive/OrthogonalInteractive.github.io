@@ -82,6 +82,29 @@ describe('fitToMarker', () => {
     expect(fitToMarker(standing, { width: 1.5, hover: 0.12 }).z).toBeCloseTo(0.12, 5)
   })
 
+  it('can be fitted by height instead, for a model that stands up', () => {
+    const standing = new THREE.Box3(
+      new THREE.Vector3(-0.3, 0, -0.16),
+      new THREE.Vector3(0.3, 1.7, 0.16),
+    )
+
+    const { scale, radius } = fitToMarker(standing, { width: 6.3, hover: 0, along: 'height' })
+
+    expect(1.7 * scale).toBeCloseTo(6.3, 5)
+    // The radius is what rests on the card either way — it is a footprint.
+    expect(radius).toBeCloseTo((0.6 * scale) / 2, 5)
+  })
+
+  it('keeps a height fit steady when only the reach changes', () => {
+    const narrow = new THREE.Box3(new THREE.Vector3(-0.3, 0, -0.16), new THREE.Vector3(0.3, 1.7, 0.16))
+    const wide = new THREE.Box3(new THREE.Vector3(-0.37, 0, -0.17), new THREE.Vector3(0.37, 1.7, 0.17))
+
+    const a = fitToMarker(narrow, { width: 6.3, hover: 0, along: 'height' })
+    const b = fitToMarker(wide, { width: 6.3, hover: 0, along: 'height' })
+
+    expect(b.scale).toBeCloseTo(a.scale, 5)
+  })
+
   it('reports the radius the footprint occupies', () => {
     const { radius, scale } = fitToMarker(box, { width: 1.1, hover: 0.1 })
 

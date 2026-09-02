@@ -71,6 +71,28 @@ describe('createSequence', () => {
     ])
   })
 
+  it('runs the clips in the order it is given, whatever the file says', () => {
+    const order = createSequence(CLIPS, { target: 5, order: ['Running', 'Backflip'] })
+
+    expect(order.plan.map((item) => item.name).slice(0, 2)).toEqual(['Running', 'Backflip'])
+    // The rest keep their own order behind the ones that were named.
+    expect(order.plan).toHaveLength(CLIPS.length)
+    expect(order.current.name).toBe('Running')
+  })
+
+  it('still points at each clip own place in the file', () => {
+    const order = createSequence(CLIPS, { target: 5, order: ['Running'] })
+
+    expect(order.current.index).toBe(3) // Running, as the model lists it
+  })
+
+  it('ignores a name the model does not have', () => {
+    const order = createSequence(CLIPS, { target: 5, order: ['Nonesuch', 'Walking'] })
+
+    expect(order.current.name).toBe('Walking')
+    expect(order.plan).toHaveLength(CLIPS.length)
+  })
+
   it('has nowhere to go with a single clip', () => {
     const order = createSequence([CLIPS[0]], { target: 5 })
     expect(order.update(100)).toBeNull()

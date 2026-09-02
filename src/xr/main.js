@@ -45,9 +45,34 @@ const TINTS = [0x8fd3e8, 0x9fe8bd, 0xc3a8f2, 0xf2d489, 0xf29fae]
 
 const FIGURE_URL = '/xr/figure.glb'
 
-// Second one out, and half again the size the fitting rule alone would give it.
+// Second one out, and how tall it stands, in mark widths. Sized by height
+// rather than by what it covers: a figure with its arms out is not a wider
+// person, and the fit should not shrink it for having them.
 const FIGURE_AT = 1
-const FIGURE_SCALE = 1.5
+const FIGURE_HEIGHT = 6.3
+
+// Which motion follows which. Measured rather than guessed — a crossfade hides
+// a small difference between the pose one clip ends on and the pose the next
+// starts from, never a large one. See tools/order-clips.mjs; it also lands on
+// an order that reads as something happening: arrive, get knocked down, get up.
+const FIGURE_ORDER = [
+  'Backflip',
+  'Knock_Down',
+  'Stand_Up1',
+  'Wave_for_Help_1',
+  'Run_to_Walk_Transition',
+  'Hello_Run',
+  'slide_light',
+  'Running',
+  'Walking',
+  'Stumble_Walk',
+  'Handstand_Flip',
+  'ymca_dance',
+  'Lunge_Roundhouse_Kick',
+  'CrouchLookAroundBow',
+  'Crouch_and_Push_Forward',
+  'penguin_walk',
+]
 
 // Its light is real rather than painted on, so it wants far less of itself fed
 // back as emission than the cat does.
@@ -71,7 +96,7 @@ const turnOverride = params.get('rot')
 // model reaches `modelSize` mark widths, so at that distance the two no longer
 // overlap and there is somewhere for the next one to stand.
 const spawnDistance = Number(params.get('out')) || modelSize
-const figureScale = Number(params.get('fs')) || FIGURE_SCALE
+const figureScale = Number(params.get('fs')) || 1
 // An 8th Wall image target lies in its own XY plane with +Z out of the print —
 // the same convention a MindAR anchor uses, and the one their own samples rely
 // on when they hang an unrotated PlaneGeometry off a target. Laying the model on
@@ -182,12 +207,17 @@ async function prepare() {
     loadFigureFactory({ size: modelSize }),
     loadFigureFactory({
       url: FIGURE_URL,
-      size: modelSize * figureScale,
+      size: FIGURE_HEIGHT * figureScale,
+      along: 'height',
       glow: FIGURE_GLOW,
-      // Six separate motions rather than one idle, and every one of them walks
-      // the model off its spot unless the travel is taken out.
+      // Sixteen separate motions rather than one idle, and every one of them
+      // walks the model off its spot unless the travel is taken out.
       sequence: true,
+      order: FIGURE_ORDER,
       pinRoot: true,
+      // It arrives by flipping onto the card, so it has no need to climb out
+      // of it first.
+      emerge: false,
     }),
   ])
   say(`target & model ready | w ${(markWidth * 1000).toFixed(0)}mm | s ${modelSize}x`,

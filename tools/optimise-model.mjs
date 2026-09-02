@@ -28,3 +28,5 @@ run('resize', '--width', '1024', '--height', '1024', source, output)
 // --formats defaults to jpeg, which means "only re-encode what is already
 // JPEG"; the whole point here is the PNGs.
 run('jpeg', '--formats', '*', '--quality', '85', output, output)
+// Keyframes an exporter emits at a fixed rate, whether or not anything moved.
+run('resample', output, output)

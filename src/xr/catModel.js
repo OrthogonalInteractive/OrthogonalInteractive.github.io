@@ -45,11 +45,14 @@ const FADE_SECONDS = 0.3
 export async function loadFigureFactory({
   url = MODEL_URL,
   size = WIDTH,
+  along = 'footprint',
   glow = 1,
   sequence = false,
+  order = [],
   slot = SLOT_SECONDS,
   fade = FADE_SECONDS,
   pinRoot = false,
+  emerge = true,
 } = {}) {
   const gltf = await new GLTFLoader().loadAsync(url)
 
@@ -70,7 +73,7 @@ export async function loadFigureFactory({
   // are valid for, and a skinned mesh cannot be measured through a transform
   // added after its bind matrix was fixed.
   const box = restBounds(template)
-  const { scale, z, radius } = fitToMarker(box, { width: size, hover: HOVER })
+  const { scale, z, radius } = fitToMarker(box, { width: size, hover: HOVER, along })
 
   // glTF is Y-up; the mark's Z points out of the card.
   template.rotation.x = Math.PI / 2
@@ -82,7 +85,10 @@ export async function loadFigureFactory({
      * colour multiplied through both albedo and emissive carries it.
      */
     create: ({ tint } = {}) =>
-      build({ gltf, template, box, scale, z, radius, tint, glow, sequence, slot, fade }),
+      build({
+        gltf, template, box, scale, z, radius,
+        tint, glow, sequence, order, slot, fade, emerge,
+      }),
 
     /** The geometry and textures every copy shares. */
     dispose() {
@@ -109,7 +115,10 @@ export async function loadCatModel(options) {
   })
 }
 
-function build({ gltf, template, box, scale, z, radius, tint, glow = 1, sequence, slot, fade }) {
+function build({
+  gltf, template, box, scale, z, radius,
+  tint, glow = 1, sequence, order, slot, fade, emerge = true,
+}) {
   const shade = new THREE.Color(tint ?? 0xffffff)
   const rest = EMISSIVE_REST * glow
   const lit = EMISSIVE_LIT * glow
@@ -130,8 +139,10 @@ function build({ gltf, template, box, scale, z, radius, tint, glow = 1, sequence
   group.add(heading)
 
   // Starts buried: the top of the model sits just under the mark's plane, where
-  // the clipping plane hides it entirely.
-  const buried = -box.max.y * scale - 0.02
+  // the clipping plane hides it entirely. A model whose first motion is its own
+  // arrival — someone flipping onto the card — needs no such help and starts
+  // where it will stay.
+  const buried = emerge ? -box.max.y * scale - 0.02 : z
   const rise = createEmergence({ from: buried, to: z, duration: RISE_SECONDS })
 
   const materials = []
@@ -157,17 +168,17 @@ function build({ gltf, template, box, scale, z, radius, tint, glow = 1, sequence
   // A model with a set of separate motions plays them in turn. Everything else
   // is a single looping idle, and copies of it start at their own point in the
   // loop: three cats breathing in step read as one object drawn three times.
-  const order =
+  const playlist =
     sequence && actions.length > 1
       ? createSequence(
           gltf.animations.map((clip) => ({ name: clip.name, duration: clip.duration })),
-          { target: slot },
+          { target: slot, order },
         )
       : null
   let playing = null
 
-  if (order) {
-    playing = actions[0]
+  if (playlist) {
+    playing = actions[playlist.current.index]
     playing.play()
   } else {
     actions.forEach((action) => {
@@ -232,11 +243,11 @@ function build({ gltf, template, box, scale, z, radius, tint, glow = 1, sequence
 
     /** Which motion is running, for models that have more than one. */
     get clip() {
-      return order ? order.current.name : (gltf.animations[0]?.name ?? '-')
+      return playlist ? playlist.current.name : (gltf.animations[0]?.name ?? '-')
     },
 
     update(delta) {
-      const next = order?.update(delta)
+      const next = playlist?.update(delta)
       if (next) {
         const action = actions[next.index]
         action.reset().setEffectiveWeight(1).play()
