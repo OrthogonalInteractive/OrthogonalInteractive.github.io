@@ -12,6 +12,7 @@ import { createCameraFrame } from './cameraFrame.js'
 import { markerSpan } from './marker.js'
 import { coverRect } from './view.js'
 import '../xr/xr.css'
+import './xr2.css'
 
 // XR8's three.js module reads the global rather than taking an import.
 window.THREE = THREE
@@ -139,6 +140,8 @@ async function prepare() {
   let span = markWidth
   let uiOrientation = 0
   let pixelModuleAdded = false
+  let ticks = 0
+  let status = '-'
 
   let handTracker = null
   let handOn = false
@@ -365,6 +368,21 @@ async function prepare() {
 
             hint.hidden = false
             say('pipeline start')
+
+            // A live camera over a black screen is either a canvas nobody can
+            // see or a renderer wiping the feed before it reaches the glass,
+            // and the only place to tell those apart is the phone it happens on.
+            setTimeout(() => {
+              const style = getComputedStyle(canvas)
+              const drawSize = renderer.getSize(new THREE.Vector2())
+              say(`canvas buf ${canvas.width}x${canvas.height}`,
+                  `css ${canvas.clientWidth}x${canvas.clientHeight}`)
+              say(` ${style.position} z:${style.zIndex} d:${style.display}`,
+                  `o:${style.opacity} fit:${style.objectFit} in:${canvas.parentElement?.id}`)
+              say(` renderer ${drawSize.x}x${drawSize.y} dpr ${renderer.getPixelRatio()}`,
+                  `clear:${renderer.autoClear} own:${renderer.domElement === canvas}`)
+              say(` frames ${ticks} tracking ${status} kids ${scene.children.length}`)
+            }, 2000)
           },
 
           onCameraStatusChange: ({ status }) => {
@@ -376,9 +394,11 @@ async function prepare() {
             }
           },
 
-          onVideoSizeChange: ({ orientation }) => {
+          onVideoSizeChange: ({ videoWidth, videoHeight, canvasWidth, canvasHeight, orientation }) => {
             uiOrientation = orientation
             overlay.resize()
+            say(`video ${videoWidth}x${videoHeight}`,
+                `canvas ${canvasWidth}x${canvasHeight} rot ${orientation}`)
           },
 
           onException: (error) => {
@@ -386,8 +406,10 @@ async function prepare() {
             setNote(`エラー: ${error?.message ?? error}`, true)
           },
 
-          onUpdate: ({ processGpuResult }) => {
+          onUpdate: ({ processCpuResult, processGpuResult }) => {
             const delta = clock.getDelta()
+            ticks += 1
+            status = processCpuResult?.reality?.trackingStatus ?? '-'
 
             fpsFrames += 1
             const now = performance.now()

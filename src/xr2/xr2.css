@@ -1,0 +1,12 @@
+/* The engine owns its canvas: it sizes and places it for the window itself.
+   The shared stage was written for MindAR, which paints behind its own feed and
+   crops it to fit — both of which can only hide a canvas that is already the
+   right size, which is exactly what a black screen with a live camera looks
+   like. */
+.stage {
+  background: transparent;
+}
+
+.stage canvas {
+  object-fit: unset;
+}
