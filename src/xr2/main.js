@@ -49,7 +49,6 @@ const note = document.querySelector('#note')
 const hint = document.querySelector('#hint')
 const hintText = document.querySelector('#hint-text')
 const hand = document.querySelector('#hand')
-const handButton = document.querySelector('#hand-enable')
 const handNote = document.querySelector('#hand-note')
 const handClear = document.querySelector('#hand-clear')
 const debugPanel = document.querySelector('#debug')
@@ -125,7 +124,6 @@ async function prepare() {
 
   const overlay = createHandOverlay(document.querySelector('#overlay'))
   const cameraFrame = createCameraFrame()
-  const stroke = createStrokeTracker()
   const pinch = createPinchScale({ maxScale: MAX_SCALE })
   const swipe = createStrokeTracker()
   const screenPinch = createScreenPinch({ max: MAX_SCALE })
@@ -149,7 +147,6 @@ async function prepare() {
   let status = '-'
 
   let handTracker = null
-  let handOn = false
   let handSeen = false
   let touching = false
   let pinched = false
@@ -171,11 +168,11 @@ async function prepare() {
 
   async function showCacheState() {
     if (!assets.available) {
-      handNote.textContent = 'Adds a 19 MB download'
+      handNote.textContent = 'Hand control on'
       return
     }
     const cached = await assets.isCached()
-    handNote.textContent = cached ? '19 MB cached on this device' : 'Adds a 19 MB download'
+    handNote.textContent = cached ? 'Hand control on — 19 MB cached' : 'Hand control on'
     handClear.hidden = !cached
   }
 
@@ -184,77 +181,39 @@ async function prepare() {
     await assets.clear()
     handClear.hidden = true
     handClear.disabled = false
-    handNote.textContent = handTracker
-      ? 'Cache cleared — downloads again next visit'
-      : 'Adds a 19 MB download'
+    handNote.textContent = 'Cache cleared — downloads again next visit'
   })
 
-  const stopSwipe = () => {
-    swiping = false
-    swipe.update({ point: null, touching: false })
-  }
-
-  function handControlOff() {
-    handOn = false
-    handSeen = false
-    touching = false
-    pinched = false
-    overlay.clear()
-    screenPinch.reset()
-    cat.setSize(1)
-    cat.setHighlight(0)
-    handButton.textContent = 'Enable hand control'
-    hintText.textContent = 'Swipe it to turn'
-    showCacheState()
-  }
-
-  function handControlOn() {
-    // Reading pixels back off the GPU costs a stall every frame, so the module
-    // is only attached once someone actually asks for hand control.
-    if (!pixelModuleAdded) {
-      XR8.addCameraPipelineModule(
-        XR8.CameraPixelArray.pipelineModule({ maxDimension: HAND_FRAME }),
-      )
-      pixelModuleAdded = true
-    }
-    handOn = true
-    pointers.clear()
-    screenPinching = false
-    stopSwipe()
-    handButton.textContent = 'Turn hand control off'
-    hintText.textContent = 'Stroke it to turn'
-    handNote.textContent = 'Hand control on'
-  }
-
-  handButton.addEventListener('click', async () => {
-    if (handOn) return handControlOff()
-    if (handTracker) return handControlOn()
-
-    handButton.disabled = true
-    handClear.hidden = true
+  /**
+   * Brings up hand tracking in the background. It is 19 MB, so the camera opens
+   * first and the page stays usable by touch whether this arrives or not.
+   */
+  async function startHandControl(XR8) {
+    hand.hidden = false
     try {
       // Scope decides which pages the worker controls, so this page needs its
       // own registration even though the assets it serves live under /xr/.
       await installAssetWorker('/xr2/sw.js', '/xr2/')
-      handNote.textContent = 'Downloading… 0%'
       await assets.download((ratio) => {
-        handNote.textContent = `Downloading… ${Math.round(ratio * 100)}%`
+        handNote.textContent = `Hand control — downloading ${Math.round(ratio * 100)}%`
       })
 
-      handNote.textContent = 'Starting hand control…'
+      handNote.textContent = 'Hand control — starting'
       const { loadHandTracker } = await import('../xr/handControl.js')
       handTracker = await loadHandTracker()
 
-      const cached = await assets.isCached()
-      handButton.disabled = false
-      handClear.hidden = !cached
-      handControlOn()
-    } catch (error) {
-      handButton.disabled = false
-      handNote.textContent = `Hand control failed: ${error?.message ?? error}`
+      // Reading pixels back off the GPU costs a stall every frame, so the
+      // module only goes on once there is something to read them for.
+      XR8.addCameraPipelineModule(
+        XR8.CameraPixelArray.pipelineModule({ maxDimension: HAND_FRAME }),
+      )
+      say('hand control ready')
       await showCacheState()
+    } catch (error) {
+      say('hand control failed:', error?.message ?? error)
+      handNote.textContent = `Hand control unavailable: ${error?.message ?? error}`
     }
-  })
+  }
 
   // --- touch --------------------------------------------------------------
 
@@ -267,10 +226,15 @@ async function prepare() {
     cat.spin(swept * facing * SPIN_GAIN)
   }
 
+  const stopSwipe = () => {
+    swiping = false
+    swipe.update({ point: null, touching: false })
+  }
+
   const pair = () => [...pointers.values()]
 
   document.addEventListener('pointerdown', (event) => {
-    if (handOn || event.target.closest('button, a')) return
+    if (event.target.closest('button, a')) return
     const point = { x: event.clientX, y: event.clientY }
     pointers.set(event.pointerId, point)
 
@@ -373,6 +337,7 @@ async function prepare() {
 
             hint.hidden = false
             say('pipeline start')
+            startHandControl(XR8)
 
           },
 
@@ -425,7 +390,7 @@ async function prepare() {
               height: window.innerHeight,
             })
 
-            if (handOn && handTracker && frames++ % DETECT_EVERY === 0) {
+            if (handTracker && frames++ % DETECT_EVERY === 0) {
               const pixels = processGpuResult?.camerapixelarray
               if (pixels && cameraFrame.update(pixels, frameTurn())) {
                 const landmarks = handTracker.detect(cameraFrame.canvas, performance.now())
@@ -466,21 +431,13 @@ async function prepare() {
                   else carry.grab(grip)
                 }
 
-                // A finger carrying the model is not stroking it.
-                if (!carry.held) {
-                  const { from, to } = stroke.update({ point, touching })
-                  spinBy(swirlAngle(from, to, circle))
-                } else {
-                  stroke.update({ point: null, touching: false })
-                }
-
                 overlay.draw(landmarks, rect, { touching, pinched })
                 hint.classList.toggle('is-found', touching || carry.held)
                 hintText.textContent = carry.held
                   ? 'Let go to drop it'
                   : touching
                     ? 'Pinch to pick it up'
-                    : 'Stroke it to turn'
+                    : 'Swipe it to turn'
                 handReadout = [
                   `hand    ${landmarks ? 'yes' : 'no'}`,
                   `pinch   ${closed ? 'CLOSED' : 'open'}`,
@@ -556,8 +513,6 @@ async function prepare() {
                 cat.reveal()
                 hint.classList.add('is-found')
                 hintText.textContent = 'Swipe it to turn'
-                hand.hidden = false
-                showCacheState()
               },
             },
           ],
