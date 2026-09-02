@@ -4,6 +4,8 @@ import { clone as cloneRigged } from 'three/addons/utils/SkeletonUtils.js'
 import { createEmergence } from './emerge.js'
 import { fitToMarker, restBounds } from './fit.js'
 import { createMotion } from './objectMotion.js'
+import { horizontalSpread, pinHorizontal } from './rootMotion.js'
+import { createSequence } from './sequence.js'
 
 const MODEL_URL = '/xr/cat.glb'
 
@@ -24,6 +26,11 @@ const HEADING = 0
 // Seconds for the model to climb out of the card.
 const RISE_SECONDS = 1.4
 
+// Roughly how long each clip of a sequenced model holds the floor, and how long
+// the change from one to the next takes to hide the jump between poses.
+const SLOT_SECONDS = 5
+const FADE_SECONDS = 0.3
+
 /**
  * Loads a model once, ready to be stood on the mark as often as needed.
  *
@@ -35,8 +42,27 @@ const RISE_SECONDS = 1.4
  * light is painted into its texture, so it needs all of it; a model that was
  * photographed rather than drawn only needs enough to answer a finger.
  */
-export async function loadFigureFactory({ url = MODEL_URL, size = WIDTH, glow = 1 } = {}) {
+export async function loadFigureFactory({
+  url = MODEL_URL,
+  size = WIDTH,
+  glow = 1,
+  sequence = false,
+  slot = SLOT_SECONDS,
+  fade = FADE_SECONDS,
+  pinRoot = false,
+} = {}) {
   const gltf = await new GLTFLoader().loadAsync(url)
+
+  // Done once on the clips every copy shares, before any of them is playing.
+  if (pinRoot) {
+    gltf.animations.forEach((clip) => {
+      clip.tracks.forEach((track) => {
+        if (!track.name.endsWith('.position')) return
+        if (!horizontalSpread(track.values)) return
+        pinHorizontal(track.values)
+      })
+    })
+  }
   const template = gltf.scene
 
   // glTF is Y-up; a MindAR anchor's Z points out of the card.
@@ -53,7 +79,8 @@ export async function loadFigureFactory({ url = MODEL_URL, size = WIDTH, glow = 
      * `tint` shades that copy: the glow is baked into the base colour, so a
      * colour multiplied through both albedo and emissive carries it.
      */
-    create: ({ tint } = {}) => build({ gltf, template, box, scale, z, radius, tint, glow }),
+    create: ({ tint } = {}) =>
+      build({ gltf, template, box, scale, z, radius, tint, glow, sequence, slot, fade }),
 
     /** The geometry and textures every copy shares. */
     dispose() {
@@ -80,7 +107,7 @@ export async function loadCatModel(options) {
   })
 }
 
-function build({ gltf, template, box, scale, z, radius, tint, glow = 1 }) {
+function build({ gltf, template, box, scale, z, radius, tint, glow = 1, sequence, slot, fade }) {
   const shade = new THREE.Color(tint ?? 0xffffff)
   const rest = EMISSIVE_REST * glow
   const lit = EMISSIVE_LIT * glow
@@ -122,14 +149,30 @@ function build({ gltf, template, box, scale, z, radius, tint, glow = 1 }) {
     child.frustumCulled = false
   })
 
-  // The sleeping cat breathes and flicks its tail on a five second loop. Copies
-  // start at their own point in it: three cats breathing in step read as one
-  // object drawn three times.
   const mixer = gltf.animations.length ? new THREE.AnimationMixer(model) : null
-  gltf.animations.forEach((clip) => {
-    const action = mixer.clipAction(clip).play()
-    action.time = Math.random() * clip.duration
-  })
+  const actions = gltf.animations.map((clip) => mixer.clipAction(clip))
+
+  // A model with a set of separate motions plays them in turn. Everything else
+  // is a single looping idle, and copies of it start at their own point in the
+  // loop: three cats breathing in step read as one object drawn three times.
+  const order =
+    sequence && actions.length > 1
+      ? createSequence(
+          gltf.animations.map((clip) => ({ name: clip.name, duration: clip.duration })),
+          { target: slot },
+        )
+      : null
+  let playing = null
+
+  if (order) {
+    playing = actions[0]
+    playing.play()
+  } else {
+    actions.forEach((action) => {
+      action.play()
+      action.time = Math.random() * action.getClip().duration
+    })
+  }
 
   const motion = createMotion(group)
 
@@ -185,7 +228,19 @@ function build({ gltf, template, box, scale, z, radius, tint, glow = 1 }) {
       return mixer ? mixer.time : 0
     },
 
+    /** Which motion is running, for models that have more than one. */
+    get clip() {
+      return order ? order.current.name : (gltf.animations[0]?.name ?? '-')
+    },
+
     update(delta) {
+      const next = order?.update(delta)
+      if (next) {
+        const action = actions[next.index]
+        action.reset().setEffectiveWeight(1).play()
+        playing.crossFadeTo(action, fade, true)
+        playing = action
+      }
       mixer?.update(delta)
       motion.update(delta)
       group.position.z = rise.update(delta)

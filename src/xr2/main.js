@@ -160,6 +160,10 @@ async function prepare() {
       url: FIGURE_URL,
       size: modelSize * FIGURE_SCALE,
       glow: FIGURE_GLOW,
+      // Six separate motions rather than one idle, and every one of them walks
+      // the model off its spot unless the travel is taken out.
+      sequence: true,
+      pinRoot: true,
     }),
   ])
   say(`target & model ready | w ${(markWidth * 1000).toFixed(0)}mm | s ${modelSize}x`,
@@ -650,6 +654,7 @@ async function prepare() {
                 `size    ${modelSize}x mark`,
                 `swipe   ${swiping ? 'YES' : screenPinching ? 'PINCH' : 'no'}`,
                 `sizes   ${cats.map((e) => e.sizing.scale.toFixed(2)).join(' ')}`,
+                `clip    ${cats.find((e) => e.isFigure)?.cat.clip ?? '-'}`,
                 `touch   ${touching ? 'YES' : 'no'}`,
                 `cats    ${cats.length}/${MAX_CATS} ${holding ? 'CARRYING' : 'free'}`,
                 `out     ${cats.map((e) => Math.hypot(e.carry.position.x, e.carry.position.y).toFixed(1)).join(' ')} (need ${spawnDistance})`,

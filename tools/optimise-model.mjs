@@ -1,5 +1,7 @@
-// Shrinks the Meshy export's 2048² texture to 1024², which takes the file from
-// ~3.7 MB to ~0.4 MB with no visible loss at the size the model is drawn.
+// Shrinks a Meshy export's 2048² texture to 1024² and stores it as JPEG, which
+// takes the file from megabytes to a few hundred KB with no visible loss at the
+// size the model is drawn. The AR page fetches this before it can show anything,
+// so the saving is the wait.
 //
 //   node tools/optimise-model.mjs <source.glb> [destination]
 //
@@ -17,8 +19,12 @@ const output = process.argv[3]
   ? path.resolve(root, process.argv[3])
   : path.join(root, 'public', 'xr', 'cat.glb')
 
-execFileSync(
-  'npx',
-  ['--yes', '@gltf-transform/cli@4', 'resize', '--width', '1024', '--height', '1024', source, output],
-  { stdio: 'inherit' },
-)
+const run = (...args) =>
+  execFileSync('npx', ['--yes', '@gltf-transform/cli@4', ...args], { stdio: 'inherit' })
+
+run('resize', '--width', '1024', '--height', '1024', source, output)
+// Nothing here needs an alpha channel, and a photographed texture keeps none of
+// PNG's advantages at a tenth of the bytes.
+// --formats defaults to jpeg, which means "only re-encode what is already
+// JPEG"; the whole point here is the PNGs.
+run('jpeg', '--formats', '*', '--quality', '85', output, output)
