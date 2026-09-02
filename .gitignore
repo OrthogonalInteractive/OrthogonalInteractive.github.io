@@ -9,3 +9,6 @@ dist
 
 # Local Firebase config; .env.example shows the shape.
 .env
+
+# Firebase CLI cache
+.firebase/

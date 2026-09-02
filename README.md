@@ -272,11 +272,15 @@ GitHub の **Settings → Secrets and variables → Actions → Variables** に
 
 未設定ならビルドは通り、計測だけが無効になる（Firebase の 561 kB も読み込まれない）。
 
-ルールは `firestore.rules`。Firebase CLI から適用する:
+ルールは `firestore.rules`。場所は `firebase.json`、既定のプロジェクトは
+`.firebaserc` に書いてある。初回のみログインが要る:
 
 ```bash
-npx firebase-tools deploy --only firestore:rules --project <projectId>
+npx firebase-tools login
+npx firebase-tools deploy --only firestore:rules
 ```
+
+ホスティングは GitHub Pages なので `firebase.json` に `hosting` は書かない。
 
 **制約**: 静的サイトなのでサーバも認証も無く、ルールは「書き込みの形」しか
 検証できない。設定を読み取った第三者が水増しすることは原理的に防げない。
