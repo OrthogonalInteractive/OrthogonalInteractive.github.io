@@ -154,6 +154,7 @@ async function prepare() {
   let span = markWidth
   let tracked = false
   let sightings = 0
+  let aspect = 0
   let uiOrientation = 0
   let status = '-'
 
@@ -183,6 +184,9 @@ async function prepare() {
   function noteMark(detail) {
     sightings += 1
     span = markerSpan(detail, markWidth)
+    aspect = detail.scaledWidth && detail.scaledHeight
+      ? detail.scaledWidth / detail.scaledHeight
+      : 0
     markPosition.copy(detail.position)
     markRotation.copy(detail.rotation)
     markScale.setScalar(span)
@@ -493,6 +497,7 @@ async function prepare() {
                 ...handReadout,
                 `mark    ${(span * 1000).toFixed(1)}u (declared ${(markWidth * 1000).toFixed(0)})`,
                 `sight   ${sightings} ${tracked ? 'TRACKED' : 'held'}`,
+                `aspect  ${aspect.toFixed(3)} (printed 4:3 = 1.333)`,
                 `size    ${modelSize}x mark`,
                 `swipe   ${swiping ? 'YES' : screenPinching ? 'PINCH' : 'no'}`,
                 `touch   ${touching ? 'YES' : 'no'}`,

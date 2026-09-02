@@ -1,15 +1,15 @@
 {
- "name": "card",
- "type": "PLANAR",
- "imagePath": "/xr2/image-targets/card_luminance.png",
- "metadata": null,
- "properties": {
-  "left": 0,
-  "top": 0,
-  "width": 768,
-  "height": 1024,
-  "isRotated": true,
-  "originalWidth": 768,
-  "originalHeight": 1024
- }
+  "name": "card",
+  "type": "PLANAR",
+  "imagePath": "/xr2/image-targets/card.png",
+  "metadata": {},
+  "properties": {
+    "left": 0,
+    "top": 0,
+    "width": 640,
+    "height": 480,
+    "originalWidth": 640,
+    "originalHeight": 480,
+    "isRotated": false
+  }
 }

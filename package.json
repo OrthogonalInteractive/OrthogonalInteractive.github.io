@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "compile:target": "node tools/compile-target.mjs",
+    "make:image-target": "node tools/make-image-target.mjs",
     "fetch:hand-assets": "node tools/fetch-hand-assets.mjs",
     "preview": "vite preview",
     "test": "vitest run",
