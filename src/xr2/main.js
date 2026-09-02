@@ -36,8 +36,7 @@ const POSE_SMOOTHING = 9
 
 // Carrying one clear of the card brings the next one up out of it, to a point.
 const MAX_CATS = 3
-const SPAWN_DISTANCE = 3 // mark widths from the mark before the next arrives
-const CARRY_LIMIT = 6 // and how far out one can be taken at all
+const CARRY_LIMIT = 6 // how far out one can be taken at all, in mark widths
 
 const MAX_SCALE = 2.5
 const SPIN_GAIN = 1
@@ -52,6 +51,10 @@ const debugging = params.has('debug')
 const markWidth = Number(params.get('w')) || MARK_WIDTH
 const modelSize = Number(params.get('s')) || MODEL_SIZE
 const turnOverride = params.get('rot')
+// Far enough out that the cat is off the print, which is its own length: the
+// model reaches `modelSize` mark widths, so at that distance the two no longer
+// overlap and there is somewhere for the next one to stand.
+const spawnDistance = Number(params.get('out')) || modelSize
 // An 8th Wall image target lies in its own XY plane with +Z out of the print —
 // the same convention a MindAR anchor uses, and the one their own samples rely
 // on when they hang an unrotated PlaneGeometry off a target. Laying the model on
@@ -138,7 +141,7 @@ async function prepare() {
     loadCatFactory({ size: modelSize }),
   ])
   say(`target & model ready | w ${(markWidth * 1000).toFixed(0)}mm | s ${modelSize}x`,
-      `| axis ${normalAxis}`)
+      `| axis ${normalAxis} | out ${spawnDistance}`)
   target.physicalWidthInMeters = markWidth
   // The card is what the room is measured from, not something to keep chasing.
   target.moveable = false
@@ -527,7 +530,7 @@ async function prepare() {
                     // Carried clear of the card and set down: the mark has room
                     // to produce another.
                     const { x, y } = holding.carry.position
-                    if (Math.hypot(x, y) >= SPAWN_DISTANCE) addCat()
+                    if (Math.hypot(x, y) >= spawnDistance) addCat()
                     holding = null
                   }
                 } else {
@@ -587,7 +590,7 @@ async function prepare() {
                 `swipe   ${swiping ? 'YES' : screenPinching ? 'PINCH' : 'no'}`,
                 `touch   ${touching ? 'YES' : 'no'}`,
                 `cats    ${cats.length}/${MAX_CATS} ${holding ? 'CARRYING' : 'free'}`,
-                `out     ${cats.map((e) => Math.hypot(e.carry.position.x, e.carry.position.y).toFixed(1)).join(' ')}`,
+                `out     ${cats.map((e) => Math.hypot(e.carry.position.x, e.carry.position.y).toFixed(1)).join(' ')} (need ${spawnDistance})`,
                 `track   ${status}`,
                 `fps     ${fps.toFixed(0)}`,
                 `object  ${hovered?.circle ? `${hovered.circle.x.toFixed(0)},${hovered.circle.y.toFixed(0)} r${hovered.circle.r.toFixed(0)}` : '-'}`,
