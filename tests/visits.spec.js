@@ -22,6 +22,35 @@ describe('readConfig', () => {
     expect(readConfig('{oops')).toBeNull()
     expect(readConfig('"a string"')).toBeNull()
   })
+
+  // What the Firebase console puts on screen is JavaScript, not JSON, and it is
+  // what anybody will paste.
+  it('takes the block the Firebase console shows, unquoted keys and all', () => {
+    expect(readConfig('{ apiKey: "k", projectId: "p" }')).toEqual({ apiKey: 'k', projectId: 'p' })
+  })
+
+  it('takes it with the declaration and semicolon still attached', () => {
+    const pasted = `const firebaseConfig = {
+      apiKey: "k",
+      authDomain: "p.firebaseapp.com",
+      projectId: "p",
+      appId: "1:2:web:3",
+    };`
+    expect(readConfig(pasted)).toEqual({
+      apiKey: 'k',
+      authDomain: 'p.firebaseapp.com',
+      projectId: 'p',
+      appId: '1:2:web:3',
+    })
+  })
+
+  it('takes single quotes, which prettier leaves behind', () => {
+    expect(readConfig("{ apiKey: 'k', projectId: 'p' }")).toEqual({ apiKey: 'k', projectId: 'p' })
+  })
+
+  it('still takes plain JSON', () => {
+    expect(readConfig('{"apiKey":"k","projectId":"p"}')).toEqual({ apiKey: 'k', projectId: 'p' })
+  })
 })
 
 describe('countVisit', () => {

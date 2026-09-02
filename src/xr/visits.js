@@ -16,13 +16,33 @@ const REQUIRED = ['apiKey', 'projectId']
  */
 export function readConfig(raw) {
   if (!raw) return null
+  const config = parse(raw) ?? parse(asJson(raw))
+  if (!config || typeof config !== 'object' || Array.isArray(config)) return null
+  return REQUIRED.every((key) => typeof config[key] === 'string' && config[key]) ? config : null
+}
+
+function parse(text) {
   try {
-    const config = JSON.parse(raw)
-    if (!config || typeof config !== 'object') return null
-    return REQUIRED.every((key) => typeof config[key] === 'string' && config[key]) ? config : null
+    return JSON.parse(text)
   } catch {
     return null
   }
+}
+
+/**
+ * The Firebase console shows its settings as a JavaScript declaration, and that
+ * is what anybody will paste. Enough of it is turned into JSON here to be read:
+ * the declaration itself, keys without quotes, quotes of the wrong kind, and a
+ * comma before the closing brace.
+ */
+function asJson(text) {
+  return text
+    .trim()
+    .replace(/^(?:const|let|var)\s+\w+\s*=\s*/, '')
+    .replace(/;\s*$/, '')
+    .replace(/([{,]\s*)([A-Za-z_$][\w$]*)\s*:/g, '$1"$2":')
+    .replace(/'([^'\\]*)'/g, '"$1"')
+    .replace(/,(\s*[}\]])/g, '$1')
 }
 
 /** Records one visit. Returns what it counted, or null if it could not. */

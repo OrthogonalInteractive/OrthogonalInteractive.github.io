@@ -265,14 +265,16 @@ Web ページから読める端末固有 ID は存在しないため、これが
 
 ### 設定
 
-Firebase コンソールで Firestore を有効にした Web アプリを作り、その設定 JSON を
+Firebase コンソールで Firestore を有効にした Web アプリを作り、その設定を
 GitHub の **Settings → Secrets and variables → Actions → Variables** に
-`FIREBASE_CONFIG` という名前で登録する（Secret ではなく Variable。web config は
-ページに埋め込まれる公開情報）。
+`FIREBASE_CONFIG` という名前で登録する。
 
-```json
-{"apiKey":"...","projectId":"...","appId":"..."}
-```
+- **Secret ではなく Variable**。web config はページに埋め込まれる公開情報
+- **Repository variables に置く**。同じ画面の上にある Environment variables は
+  `environment:` を宣言したジョブからしか見えず、ビルドしている `build` ジョブは
+  宣言していないので読めない
+- 値はコンソールに出る `const firebaseConfig = { ... };` をそのまま貼ってよい。
+  JSON でなくても読めるようにしてある
 
 未設定ならビルドは通り、計測だけが無効になる（Firebase の 561 kB も読み込まれない）。
 
