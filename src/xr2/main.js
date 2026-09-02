@@ -72,6 +72,7 @@ const turnOverride = params.get('rot')
 // model reaches `modelSize` mark widths, so at that distance the two no longer
 // overlap and there is somewhere for the next one to stand.
 const spawnDistance = Number(params.get('out')) || modelSize
+const figureScale = Number(params.get('fs')) || FIGURE_SCALE
 // An 8th Wall image target lies in its own XY plane with +Z out of the print —
 // the same convention a MindAR anchor uses, and the one their own samples rely
 // on when they hang an unrotated PlaneGeometry off a target. Laying the model on
@@ -158,7 +159,7 @@ async function prepare() {
     loadFigureFactory({ size: modelSize }),
     loadFigureFactory({
       url: FIGURE_URL,
-      size: modelSize * FIGURE_SCALE,
+      size: modelSize * figureScale,
       glow: FIGURE_GLOW,
       // Six separate motions rather than one idle, and every one of them walks
       // the model off its spot unless the travel is taken out.
@@ -167,7 +168,7 @@ async function prepare() {
     }),
   ])
   say(`target & model ready | w ${(markWidth * 1000).toFixed(0)}mm | s ${modelSize}x`,
-      `| axis ${normalAxis} | out ${spawnDistance}`)
+      `| axis ${normalAxis} | out ${spawnDistance} | fs ${figureScale}`)
   target.physicalWidthInMeters = markWidth
   // The card is what the room is measured from, not something to keep chasing.
   target.moveable = false

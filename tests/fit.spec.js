@@ -45,35 +45,93 @@ describe('restBounds', () => {
 })
 
 describe('fitToMarker', () => {
-  it('scales the longest footprint edge to the requested width', () => {
-    const { scale } = fitToMarker(box, { width: 1.1, hover: 0 })
+  // The box arrives already stood upright on the mark, so its Z is the height
+  // and its X and Y are what rests on the card.
+  const upright = new THREE.Box3(
+    new THREE.Vector3(-2.023, -1.588, 0),
+    new THREE.Vector3(2.021, 1.592, 1.7),
+  )
 
-    expect((box.max.x - box.min.x) * scale).toBeCloseTo(1.1, 5)
+  it('scales the longest footprint edge to the requested width', () => {
+    const { scale } = fitToMarker(upright, { width: 1.1, hover: 0 })
+
+    expect((upright.max.x - upright.min.x) * scale).toBeCloseTo(1.1, 5)
+  })
+
+  it('measures the footprint across the card, never up it', () => {
+    // Taller than it is wide: the height must not be mistaken for a footprint.
+    const standing = new THREE.Box3(
+      new THREE.Vector3(-0.3, -0.16, 0),
+      new THREE.Vector3(0.3, 0.16, 1.7),
+    )
+
+    const { scale } = fitToMarker(standing, { width: 1.5, hover: 0 })
+
+    expect(0.6 * scale).toBeCloseTo(1.5, 5)
+    expect(1.7 * scale).toBeCloseTo(4.25, 2) // stands well clear of the card
   })
 
   it('lifts the model so its underside clears the card', () => {
     const hover = 0.1
-    const { scale, z } = fitToMarker(box, { width: 1.1, hover })
+    const { scale, z } = fitToMarker(upright, { width: 1.1, hover })
 
-    // Model Y becomes marker Z once the glTF frame is rotated upright.
-    expect(z + box.min.y * scale).toBeCloseTo(hover, 5)
+    expect(z + upright.min.z * scale).toBeCloseTo(hover, 5)
+  })
+
+  it('rests a model whose underside is already at zero on the hover gap alone', () => {
+    const { z } = fitToMarker(upright, { width: 1.1, hover: 0.12 })
+
+    expect(z).toBeCloseTo(0.12, 5)
   })
 
   it('reports the radius the footprint occupies', () => {
-    const { radius, scale } = fitToMarker(box, { width: 1.1, hover: 0.1 })
+    const { radius, scale } = fitToMarker(upright, { width: 1.1, hover: 0.1 })
 
-    expect(radius).toBeCloseTo(((box.max.x - box.min.x) * scale) / 2, 5)
+    expect(radius).toBeCloseTo(((upright.max.x - upright.min.x) * scale) / 2, 5)
   })
 
-  it('is unfazed by a model that is taller than it is wide', () => {
-    const tall = new THREE.Box3(
-      new THREE.Vector3(-0.1, -2, -0.1),
-      new THREE.Vector3(0.1, 2, 0.1),
+})
+
+// A rig can carry a scale of its own, and glTF says a skinned mesh's node
+// transform is ignored: the joints place the vertices. Measuring the geometry
+// through the node's world matrix then reports a size nobody will ever see.
+describe('restBounds on a skinned mesh', () => {
+  // `boneInverse` stands in for the file's inverse bind matrix, which is not
+  // simply the joint's transform undone when the rig and the mesh were authored
+  // at different scales — a centimetre rig on a metre mesh, as exports do.
+  const rig = ({ boneInverse = new THREE.Matrix4(), nodeScale = 1 } = {}) => {
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute(
+      'position',
+      new THREE.Float32BufferAttribute([0, 0, 0, 0, 1, 0], 3),
     )
+    geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute([0, 0, 0, 0, 0, 0, 0, 0], 4))
+    geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute([1, 0, 0, 0, 1, 0, 0, 0], 4))
 
-    const { scale, z } = fitToMarker(tall, { width: 1, hover: 0.05 })
+    const bone = new THREE.Bone()
+    const mesh = new THREE.SkinnedMesh(geometry, new THREE.MeshBasicMaterial())
+    const root = new THREE.Group()
+    root.scale.setScalar(nodeScale)
+    root.add(mesh)
+    root.add(bone)
+    root.updateMatrixWorld(true)
+    mesh.bind(new THREE.Skeleton([bone], [boneInverse]), mesh.matrixWorld)
+    return root
+  }
 
-    expect(0.2 * scale).toBeCloseTo(1, 5)
-    expect(z).toBeGreaterThan(0)
+  const heightOf = (object) => {
+    const size = new THREE.Vector3()
+    restBounds(object).getSize(size)
+    return size.y
+  }
+
+  it('measures a plain rig the way it is drawn', () => {
+    expect(heightOf(rig())).toBeCloseTo(1, 5)
   })
+
+  it('follows the skeleton rather than the geometry', () => {
+    const boneInverse = new THREE.Matrix4().makeScale(2, 2, 2)
+    expect(heightOf(rig({ boneInverse }))).toBeCloseTo(2, 5)
+  })
+
 })
