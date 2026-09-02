@@ -51,32 +51,37 @@ const FIGURE_URL = '/xr/figure.glb'
 const FIGURE_AT = 1
 const FIGURE_HEIGHT = 6.3
 
-// Which motion follows which. Measured rather than guessed — a crossfade hides
-// a small difference between the pose one clip ends on and the pose the next
-// starts from, never a large one. See tools/order-clips.mjs. Most joins land
-// under 30 degrees; Stand_Up1 begins on the floor and nothing else ends there,
-// so its two are the ones that show.
+// The order the motions run in, written as something happening rather than
+// searched for. tools/order-clips.mjs scores it: every join lands where the
+// cheapest possible arrangement would put it, within a degree, so nothing was
+// paid for the story.
+//
+//   flips in, waves, sets off walking, breaks into a run, tears past waving,
+//   slows, trips, recovers with a kick, throws a handstand, lands low and
+//   looks around, pushes back up, dances, slides, waddles off.
+//
 const FIGURE_ORDER = [
   'Backflip',
-  'Stumble_Walk',
-  'Run_to_Walk_Transition',
-  'Running',
-  'slide_light',
-  'Hello_Run',
-  'penguin_walk',
   'Wave_for_Help_1',
-  'Handstand_Flip',
-  'ymca_dance',
+  'Walking',
+  'Running',
+  'Hello_Run',
+  'Run_to_Walk_Transition',
+  'Stumble_Walk',
   'Lunge_Roundhouse_Kick',
-  'Stand_Up1',
+  'Handstand_Flip',
   'CrouchLookAroundBow',
   'Crouch_and_Push_Forward',
-  'Walking',
+  'ymca_dance',
+  'slide_light',
+  'penguin_walk',
 ]
 
 // Knock_Down throws the figure over backwards and a metre off its feet, which
-// on a business card is the figure leaving.
-const FIGURE_SKIP = ['Knock_Down']
+// on a business card is the figure leaving. Stand_Up1 begins flat on the floor,
+// and with nothing left that puts it there, getting up is a thing that happens
+// for no reason — the one join in fifteen that no order could hide.
+const FIGURE_SKIP = ['Knock_Down', 'Stand_Up1']
 
 // Its light is real rather than painted on, so it wants far less of itself fed
 // back as emission than the cat does.

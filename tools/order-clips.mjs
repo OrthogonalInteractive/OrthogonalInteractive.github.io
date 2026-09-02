@@ -96,9 +96,46 @@ const clips = json.animations.filter((a) => !dropped.includes(a.name)).map((anim
 const start = clips.findIndex((clip) => clip.name === opening)
 if (start < 0) throw new Error(`no clip named ${opening}`)
 
+// A story is not the cheapest path through these poses, so an order written by
+// hand can be scored here rather than searched for: ORDER=a,b,c reports what
+// each join costs and leaves the choosing to whoever wrote it.
+const given = (process.env.ORDER ?? '').split(',').map((n) => n.trim()).filter(Boolean)
+
+function report(list) {
+  console.log('order'.padEnd(28), 'length  join from previous')
+  let cycle = 0
+  list.forEach((clip, i) => {
+    const loops = Math.max(1, Math.round(5 / clip.seconds))
+    cycle += clip.seconds * loops
+    console.log(
+      `${String(i + 1).padStart(2)}. ${clip.name.padEnd(24)}`,
+      `${clip.seconds.toFixed(2)}s`,
+      `${clip.gap.toFixed(1)}deg`,
+    )
+  })
+  console.log(`\nfull cycle ${cycle.toFixed(0)}s`)
+  console.log(`\n${JSON.stringify(list.map((c) => c.name), null, 2)}`)
+  console.log('worst join', Math.max(...list.map((c) => c.gap)).toFixed(1) + 'deg')
+}
+
 const at = (clip) => ({ pose: clip.first, root: clip.firstRoot })
 const after = (clip) => ({ pose: clip.last, root: clip.lastRoot })
 const cost = (a, b) => apart(after(a), at(b))
+
+if (given.length) {
+  const listed = given.map((name) => {
+    const clip = clips.find((c) => c.name === name)
+    if (!clip) throw new Error(`no clip named ${name}`)
+    return clip
+  })
+  const missing = clips.filter((c) => !listed.includes(c)).map((c) => c.name)
+  if (missing.length) console.log(`not in this order: ${missing.join(', ')}\n`)
+  listed.forEach((clip, i) => {
+    clip.gap = cost(listed[(i - 1 + listed.length) % listed.length], clip)
+  })
+  report(listed)
+  process.exit(0)
+}
 
 // Nearest next pose each time, which is quick but spends the good joins early
 // and leaves whatever is left to collide at the end.
@@ -158,7 +195,7 @@ order.forEach((clip, i) => {
 })
 
 if (process.env.MATRIX) {
-  const rows = ['Knock_Down', 'Stand_Up1', 'Backflip', 'CrouchLookAroundBow', 'Lunge_Roundhouse_Kick']
+  const rows = clips.map((c) => c.name)
   console.log('cost of A-end -> B-start, in degrees\n')
   console.log('from \\ to'.padEnd(24) + clips.map((c) => c.name.slice(0, 7).padStart(8)).join(''))
   for (const name of rows) {
@@ -167,16 +204,4 @@ if (process.env.MATRIX) {
   }
   console.log()
 }
-console.log('order'.padEnd(28), 'length  join from previous')
-let cycle = 0
-order.forEach((clip, i) => {
-  const loops = Math.max(1, Math.round(5 / clip.seconds))
-  cycle += clip.seconds * loops
-  console.log(
-    `${String(i + 1).padStart(2)}. ${clip.name.padEnd(24)}`,
-    `${clip.seconds.toFixed(2)}s`,
-    `${clip.gap.toFixed(1)}deg`,
-  )
-})
-console.log(`\nfull cycle ${cycle.toFixed(0)}s`)
-console.log(`\n${JSON.stringify(order.map((c) => c.name), null, 2)}`)
+report(order)
