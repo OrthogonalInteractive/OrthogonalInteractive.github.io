@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { loadCatFactory } from '../xr/catModel.js'
+import { loadFigureFactory } from '../xr/catModel.js'
 import { fingertip, isTouching, screenCircle } from '../xr/contact.js'
 import { createHandOverlay } from '../xr/handOverlay.js'
 import { HAND_ASSETS, HAND_CACHE, createAssetStore, installAssetWorker } from '../xr/handAssets.js'
@@ -35,12 +35,19 @@ const MARK_WIDTH = 0.024
 const POSE_SMOOTHING = 9
 
 // Carrying one clear of the card brings the next one up out of it, to a point.
-const MAX_CATS = 5
+const MAX_CATS = 6
 
 // One shade each, so a cat can be told from the one beside it. The first keeps
 // the house cyan the artwork is drawn in; the rest step round from it without
-// leaving the same luminous family.
+// leaving the same luminous family. The last one out is not a cat and takes no
+// shade at all — it was photographed, and tinting it would only spoil it.
 const TINTS = [0x8fd3e8, 0x9fe8bd, 0xc3a8f2, 0xf2d489, 0xf29fae]
+
+const FIGURE_URL = '/xr2/figure.glb'
+
+// Its light is real rather than painted on, so it wants far less of itself fed
+// back as emission than the cat does.
+const FIGURE_GLOW = 0.3
 const CARRY_LIMIT = 6 // how far out one can be taken at all, in mark widths
 
 const MAX_SCALE = 2.5
@@ -141,9 +148,10 @@ async function prepare() {
       `| compatible ${XR8.XrDevice.isDeviceBrowserCompatible()}`)
 
   setNote('モデルを読み込んでいます…')
-  const [target, catalogue] = await Promise.all([
+  const [target, catalogue, figures] = await Promise.all([
     fetch(TARGET_URL).then((response) => response.json()),
-    loadCatFactory({ size: modelSize }),
+    loadFigureFactory({ size: modelSize }),
+    loadFigureFactory({ url: FIGURE_URL, size: modelSize, glow: FIGURE_GLOW }),
   ])
   say(`target & model ready | w ${(markWidth * 1000).toFixed(0)}mm | s ${modelSize}x`,
       `| axis ${normalAxis} | out ${spawnDistance}`)
@@ -229,7 +237,11 @@ async function prepare() {
   /** Stands another cat on the mark, if there is room for one. */
   function addCat() {
     if (!frame || cats.length >= MAX_CATS) return null
-    const cat = catalogue.create({ tint: TINTS[cats.length % TINTS.length] })
+    // The last one out is the odd one: a different model, in its own colours.
+    const last = cats.length === MAX_CATS - 1
+    const cat = last
+      ? figures.create()
+      : catalogue.create({ tint: TINTS[cats.length % TINTS.length] })
     cat.heading = heading
     cat.applyClipping(clipPlane)
 
@@ -383,6 +395,7 @@ async function prepare() {
     overlay.dispose()
     cats.forEach((entry) => entry.cat.dispose())
     catalogue.dispose()
+    figures.dispose()
     XR8.stop()
   })
 

@@ -25,14 +25,18 @@ const HEADING = 0
 const RISE_SECONDS = 1.4
 
 /**
- * Loads the studio's cat once, ready to be stood on the mark as often as needed.
+ * Loads a model once, ready to be stood on the mark as often as needed.
  *
  * `size` is how far it should reach across the mark, as a multiple of the
  * mark's width — the anchor spans one unit, so the fit is the same whether that
  * unit came from an image tracker or from a measured world-space anchor.
+ *
+ * `glow` scales how much of the base colour is fed back as emission. The cat's
+ * light is painted into its texture, so it needs all of it; a model that was
+ * photographed rather than drawn only needs enough to answer a finger.
  */
-export async function loadCatFactory({ size = WIDTH } = {}) {
-  const gltf = await new GLTFLoader().loadAsync(MODEL_URL)
+export async function loadFigureFactory({ url = MODEL_URL, size = WIDTH, glow = 1 } = {}) {
+  const gltf = await new GLTFLoader().loadAsync(url)
   const template = gltf.scene
 
   // glTF is Y-up; a MindAR anchor's Z points out of the card.
@@ -49,7 +53,7 @@ export async function loadCatFactory({ size = WIDTH } = {}) {
      * `tint` shades that copy: the glow is baked into the base colour, so a
      * colour multiplied through both albedo and emissive carries it.
      */
-    create: ({ tint } = {}) => build({ gltf, template, box, scale, z, radius, tint }),
+    create: ({ tint } = {}) => build({ gltf, template, box, scale, z, radius, tint, glow }),
 
     /** The geometry and textures every copy shares. */
     dispose() {
@@ -65,7 +69,7 @@ export async function loadCatFactory({ size = WIDTH } = {}) {
 
 /** One cat on the mark. Kept for callers that only ever want the one. */
 export async function loadCatModel(options) {
-  const factory = await loadCatFactory(options)
+  const factory = await loadFigureFactory(options)
   const cat = factory.create()
   const disposeOne = cat.dispose
   return Object.assign(cat, {
@@ -76,8 +80,10 @@ export async function loadCatModel(options) {
   })
 }
 
-function build({ gltf, template, box, scale, z, radius, tint }) {
+function build({ gltf, template, box, scale, z, radius, tint, glow = 1 }) {
   const shade = new THREE.Color(tint ?? 0xffffff)
+  const rest = EMISSIVE_REST * glow
+  const lit = EMISSIVE_LIT * glow
   // A SkinnedMesh cannot be copied with Object3D.clone: the copy's bones are
   // the originals', so every cat would be posed by whichever skeleton moved
   // last. SkeletonUtils rebuilds the binding against the cloned bones.
@@ -109,7 +115,7 @@ function build({ gltf, template, box, scale, z, radius, tint }) {
     material.emissiveMap = material.map
     material.color.multiply(shade)
     material.emissive = shade.clone()
-    material.emissiveIntensity = EMISSIVE_REST
+    material.emissiveIntensity = rest
     materials.push(material)
     // The skinned bounds are computed from the rest pose, and the idle motion
     // is small enough that culling on them would only ever be wrong.
@@ -183,8 +189,7 @@ function build({ gltf, template, box, scale, z, radius, tint }) {
       mixer?.update(delta)
       motion.update(delta)
       group.position.z = rise.update(delta)
-      const intensity =
-        EMISSIVE_REST + (EMISSIVE_LIT - EMISSIVE_REST) * motion.highlight
+      const intensity = rest + (lit - rest) * motion.highlight
       materials.forEach((material) => {
         material.emissiveIntensity = intensity
         material.opacity = motion.presence
