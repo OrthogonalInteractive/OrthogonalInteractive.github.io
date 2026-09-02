@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { markerSpan, spanToScale } from '../src/xr2/marker.js'
+import { markerSpan, spanToScale } from '../src/xr/marker.js'
 
 // 8th Wall reports scaledWidth/scaledHeight as ratios that only become a
 // length once multiplied by scale, so the product is the mark's real span.

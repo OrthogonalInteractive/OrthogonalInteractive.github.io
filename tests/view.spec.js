@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { coverRect, orientedSize } from '../src/xr2/view.js'
+import { coverRect, orientedSize } from '../src/xr/view.js'
 
 // The camera sensor delivers a fixed frame while the UI turns under it, so the
 // image as displayed is not always the shape the camera reported.

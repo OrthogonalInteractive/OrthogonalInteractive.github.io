@@ -23,10 +23,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      # mind-ar pulls in node-canvas, whose native build needs system libraries
-      # this runner does not have. Nothing in the build or the tests uses it —
-      # it only backs `npm run compile:target`, which runs locally and whose
-      # output (public/xr/targets.mind) is committed.
+      # --ignore-scripts: node-canvas builds a native module against system
+      # libraries this runner does not have. Nothing in the build or the tests
+      # uses it — it only backs `npm run make:image-target`, which runs locally
+      # and whose output (public/xr/image-targets/) is committed.
       - run: npm ci --ignore-scripts
       - run: npm test
       - run: npm run build

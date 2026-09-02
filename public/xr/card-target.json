@@ -1,7 +1,7 @@
 {
   "name": "card",
   "type": "PLANAR",
-  "imagePath": "/xr2/image-targets/card.png",
+  "imagePath": "/xr/image-targets/card.png",
   "metadata": {},
   "properties": {
     "left": 0,

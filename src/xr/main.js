@@ -1,38 +1,90 @@
 import * as THREE from 'three'
-import { MindARThree } from 'mind-ar/dist/mindar-image-three.prod.js'
-import { loadCatModel } from './catModel.js'
+import { loadFigureFactory } from './catModel.js'
 import { fingertip, isTouching, screenCircle } from './contact.js'
-import { createHandOverlay, videoRect } from './handOverlay.js'
+import { createHandOverlay } from './handOverlay.js'
+import { HAND_ASSETS, HAND_CACHE, createAssetStore, installAssetWorker } from './handAssets.js'
 import { createPinchScale } from './pinchScale.js'
 import { createPoseSmoother } from './poseSmoother.js'
 import { createScreenPinch } from './screenPinch.js'
-import { HAND_ASSETS, HAND_CACHE, createAssetStore, installAssetWorker } from './handAssets.js'
 import { createStrokeTracker } from './stroke.js'
 import { swirlAngle } from './swirl.js'
 import { unsupportedReason } from './support.js'
-import './xr.css'
+import { createCameraFrame } from './cameraFrame.js'
+import { createCarry } from './carry.js'
+import { headingToward } from './facing.js'
+import { createReach } from './reach.js'
+import { markerSpan } from './marker.js'
+import { coverRect } from './view.js'
+import '../xr/xr.css'
 
-const TARGET_SRC = '/xr/targets.mind'
+// XR8's three.js module reads the global rather than taking an import.
+window.THREE = THREE
 
-// How much of the swept angle the object takes on.
-const SPIN_GAIN = 1
+const TARGET_URL = '/xr/card-target.json'
 
-// The largest the model can be made, by either kind of pinch.
-const MAX_SCALE = 2.5
+// How far the model reaches across the mark. It stands a little proud of the
+// card so it reads as an object on it rather than a decal in it.
+const MODEL_SIZE = 1.5
 
-// How quickly the object settles onto a freshly tracked pose, per second.
-// Lower is steadier but lags a moving camera.
+// The printed mark on the business card, in metres. Absolute scale needs a real
+// measurement: monocular SLAM has no size of its own.
+const MARK_WIDTH = 0.024
+
+// How quickly the mark's pose is taken up, per second. The tracker's estimate
+// moves about; following it directly is what makes the model judder.
 const POSE_SMOOTHING = 9
 
-// Hand detection every other frame keeps the interaction responsive without
-// paying for it on every render.
+// Carrying one clear of the card brings the next one up out of it, to a point.
+const MAX_CATS = 6
+
+// One shade each, so a cat can be told from the one beside it. The first keeps
+// the house cyan the artwork is drawn in; the rest step round from it without
+// leaving the same luminous family. The last one out is not a cat and takes no
+// shade at all — it was photographed, and tinting it would only spoil it.
+const TINTS = [0x8fd3e8, 0x9fe8bd, 0xc3a8f2, 0xf2d489, 0xf29fae]
+
+const FIGURE_URL = '/xr/figure.glb'
+
+// Second one out, and half again the size the fitting rule alone would give it.
+const FIGURE_AT = 1
+const FIGURE_SCALE = 1.5
+
+// Its light is real rather than painted on, so it wants far less of itself fed
+// back as emission than the cat does.
+const FIGURE_GLOW = 0.3
+const CARRY_LIMIT = 6 // how far out one can be taken at all, in mark widths
+
+const MAX_SCALE = 2.5
+const SPIN_GAIN = 1
 const DETECT_EVERY = 2
 
-const debugPanel = document.querySelector('#debug')
-const headingPanel = document.querySelector('#heading')
-const headingValue = document.querySelector('#heading-value')
-const debugging = new URLSearchParams(location.search).has('debug')
-const HEADING_KEY = 'oi-xr-heading'
+// Longest side of the frame handed to the hand tracker. Every pixel here is a
+// GPU readback on the render thread, so it stays well below the camera's own.
+const HAND_FRAME = 320
+
+const params = new URLSearchParams(location.search)
+const debugging = params.has('debug')
+const markWidth = Number(params.get('w')) || MARK_WIDTH
+const modelSize = Number(params.get('s')) || MODEL_SIZE
+const turnOverride = params.get('rot')
+// Far enough out that the cat is off the print, which is its own length: the
+// model reaches `modelSize` mark widths, so at that distance the two no longer
+// overlap and there is somewhere for the next one to stand.
+const spawnDistance = Number(params.get('out')) || modelSize
+const figureScale = Number(params.get('fs')) || FIGURE_SCALE
+// An 8th Wall image target lies in its own XY plane with +Z out of the print —
+// the same convention a MindAR anchor uses, and the one their own samples rely
+// on when they hang an unrotated PlaneGeometry off a target. Laying the model on
+// +Y instead stood it up at right angles to the card.
+//
+// Which way along +Z is not a convention but a measurement: recovering a plane's
+// pose from what a camera sees admits two solutions mirrored through the plane,
+// so the normal can come back pointing into the desk, and the model then rises
+// under the clipping plane meant to hide it while it is still buried.
+const normalAxis = (params.get('axis') ?? 'z').toLowerCase()
+const COLUMN = { x: 0, y: 1, z: 2 }
+const heading = Number(params.get('spin')) || 0
+const UP = new THREE.Vector3(0, 0, 1)
 
 const intro = document.querySelector('#intro')
 const startButton = document.querySelector('#start')
@@ -40,67 +92,256 @@ const note = document.querySelector('#note')
 const hint = document.querySelector('#hint')
 const hintText = document.querySelector('#hint-text')
 const hand = document.querySelector('#hand')
-const handButton = document.querySelector('#hand-enable')
 const handNote = document.querySelector('#hand-note')
 const handClear = document.querySelector('#hand-clear')
+const debugPanel = document.querySelector('#debug')
+const guide = document.querySelector('#guide')
+const guideHand = document.querySelector('#guide-hand')
 
 const assets = createAssetStore({ urls: HAND_ASSETS, cacheName: HAND_CACHE })
+
+// Every failure here is invisible from the phone that hit it, which is the only
+// place this page runs, so the stages are always recorded — ?debug is what puts
+// them, and the per-frame numbers, on screen.
+const stages = []
+let readout = []
+debugPanel.hidden = !debugging
+
+function paint() {
+  if (!debugging) return
+  debugPanel.textContent = [...stages.slice(-12), ...readout].join('\n')
+}
+
+function say(...parts) {
+  stages.push(parts.join(' '))
+  paint()
+}
 
 function setNote(message, isError = false) {
   note.textContent = message
   note.classList.toggle('is-error', isError)
 }
 
-async function launch() {
-  startButton.disabled = true
-  setNote('カメラを起動しています…')
+// Without these a failure anywhere in setup shows only as a button that does
+// nothing at all.
+window.addEventListener('error', (event) => {
+  say('ERROR:', event.message)
+  setNote(`エラー: ${event.message}`, true)
+})
+window.addEventListener('unhandledrejection', (event) => {
+  say('REJECTED:', event.reason?.message ?? event.reason)
+  setNote(`エラー: ${event.reason?.message ?? event.reason}`, true)
+})
 
-  const mindarThree = new MindARThree({
-    container: document.querySelector('#scene'),
-    imageTargetSrc: TARGET_SRC,
-    uiLoading: 'no',
-    uiScanning: 'no',
-    uiError: 'no',
+// Long enough to read once, and gone the moment it has been acted on.
+const GUIDE_SECONDS = 16
+let guideTimer = 0
+let guideDone = false
+
+function showGuide() {
+  if (guideDone) return
+  guide.hidden = false
+  clearTimeout(guideTimer)
+  guideTimer = setTimeout(hideGuide, GUIDE_SECONDS * 1000)
+}
+
+function hideGuide() {
+  if (guideDone) return
+  guideDone = true
+  clearTimeout(guideTimer)
+  guide.classList.add('is-gone')
+}
+
+document.querySelector('#guide-close').addEventListener('click', hideGuide)
+
+/** The engine and its helpers arrive as async scripts, each with its own event. */
+function waitFor(name, event) {
+  return new Promise((resolve) => {
+    if (window[name]) return resolve(window[name])
+    window.addEventListener(event, () => resolve(window[name]), { once: true })
   })
+}
 
-  const { renderer, scene, camera } = mindarThree
+async function prepare() {
+  setNote('エンジンを読み込んでいます…')
+
+  const startedAt = performance.now()
+  const [XR8] = await Promise.all([
+    waitFor('XR8', 'xrloaded'),
+    waitFor('XRExtras', 'xrextrasloaded'),
+  ])
+  const { XRExtras } = window
+  say(`engine ${((performance.now() - startedAt) / 1000).toFixed(1)}s | three ${THREE.REVISION}`)
+  const device = XR8.XrDevice.deviceEstimate()
+  say(`${device.os} ${device.osVersion} / ${device.browser?.name}`,
+      `| compatible ${XR8.XrDevice.isDeviceBrowserCompatible()}`)
+
+  setNote('モデルを読み込んでいます…')
+  const [target, catalogue, figures] = await Promise.all([
+    fetch(TARGET_URL).then((response) => response.json()),
+    loadFigureFactory({ size: modelSize }),
+    loadFigureFactory({
+      url: FIGURE_URL,
+      size: modelSize * figureScale,
+      glow: FIGURE_GLOW,
+      // Six separate motions rather than one idle, and every one of them walks
+      // the model off its spot unless the travel is taken out.
+      sequence: true,
+      pinRoot: true,
+    }),
+  ])
+  say(`target & model ready | w ${(markWidth * 1000).toFixed(0)}mm | s ${modelSize}x`,
+      `| axis ${normalAxis} | out ${spawnDistance} | fs ${figureScale}`)
+  target.physicalWidthInMeters = markWidth
+  // The card is what the room is measured from, not something to keep chasing.
+  target.moveable = false
+
+  const canvas = document.createElement('canvas')
+  document.querySelector('#scene').appendChild(canvas)
+
   const overlay = createHandOverlay(document.querySelector('#overlay'))
-  const stroke = createStrokeTracker()
+  const cameraFrame = createCameraFrame()
   const pinch = createPinchScale({ maxScale: MAX_SCALE })
-  let lastDetectAt = 0
+  const swipe = createStrokeTracker()
+  const reach = createReach()
+  const smoother = createPoseSmoother({ rate: POSE_SMOOTHING })
+
+  const clock = new THREE.Clock()
+  const clipPlane = new THREE.Plane()
+  const markNormal = new THREE.Vector3()
+  const objectPosition = new THREE.Vector3()
+  const toCamera = new THREE.Vector3()
+  const worldScale = new THREE.Vector3()
+  const markPose = new THREE.Matrix4()
+  const markPosition = new THREE.Vector3()
+  const markRotation = new THREE.Quaternion()
+  const markScale = new THREE.Vector3()
+
+  let anchor = null
+  let frame = null
+  // One entry per cat on the card: its own carry, its own circle on screen, and
+  // how far away it is, which is what decides who a finger has hold of.
+  const cats = []
+  let holding = null
+  let hovered = null
+  let swipeTarget = null
+  let pinchTarget = null
+  let span = markWidth
+  let normalColumn = 1
+  let normalSign = 1
+  let tracked = false
+  let sightings = 0
+  let aspect = 0
+  let uiOrientation = 0
+  let status = '-'
+
   let handTracker = null
-  let handOn = false
-  let frame = 0
+  let handSeen = false
   let touching = false
+  let pinched = false
+  let frames = 0
+  let lastDetectAt = 0
+  let handReadout = []
 
-  scene.add(new THREE.AmbientLight(0xbcd6de, 1.1))
-  const keyLight = new THREE.DirectionalLight(0xdff0f6, 2.2)
-  keyLight.position.set(0.6, 0.8, 1.4)
-  scene.add(keyLight)
-  const rimLight = new THREE.PointLight(0x8fd3e8, 3, 6)
-  rimLight.position.set(-0.8, -0.4, 1)
-  scene.add(rimLight)
+  const pointers = new Map()
+  let swiping = false
+  let screenPinching = false
+  let fps = 0
+  let fpsAt = performance.now()
+  let fpsFrames = 0
 
-  const cat = await loadCatModel()
-  const anchor = mindarThree.addAnchor(0)
+  /**
+   * Takes the mark's latest reported pose.
+   *
+   * A first sighting can be a poor one — grazing, blurred, half in frame — and
+   * its estimate can be tilted well off the card. Keeping the anchor on the
+   * mark for as long as the mark is visible lets a bad first look correct
+   * itself; freezing on loss is what leaves the model standing in the room.
+   */
+  function noteMark(detail) {
+    sightings += 1
+    span = markerSpan(detail, markWidth)
+    aspect = detail.scaledWidth && detail.scaledHeight
+      ? detail.scaledWidth / detail.scaledHeight
+      : 0
+    markPosition.copy(detail.position)
+    markRotation.copy(detail.rotation)
+    markScale.setScalar(span)
+    markPose.compose(markPosition, markRotation, markScale)
+    tracked = true
+  }
 
-  // The object rides its own group rather than the anchor's. MindAR wipes a
-  // lost anchor's matrix to zeroes, so anything parented to it vanishes the
-  // instant a hand covers the mark — which is exactly when it must not.
-  const holder = new THREE.Group()
-  holder.matrixAutoUpdate = false
-  holder.visible = false
-  holder.add(cat.group)
-  scene.add(holder)
+  /** Stands another cat on the mark, if there is room for one. */
+  function addCat() {
+    if (!frame || cats.length >= MAX_CATS) return null
+    // One of them is not a cat, and keeps its own colours. The rest take a
+    // shade each, counted among themselves so no two share one.
+    const isFigure = cats.length === FIGURE_AT
+    const shades = cats.filter((entry) => !entry.isFigure).length
+    const cat = isFigure
+      ? figures.create()
+      : catalogue.create({ tint: TINTS[shades % TINTS.length] })
+    cat.heading = heading
+    cat.applyClipping(clipPlane)
 
-  /** Reflects whether the 19 MB is already on the device. */
+    const carrier = new THREE.Group()
+    carrier.add(cat.group)
+    frame.add(carrier)
+
+    // Its own sizing as well as its own carry: a screen pinch keeps the size it
+    // left behind, so one shared between models would hand the next one the
+    // last one's scale.
+    const entry = {
+      cat,
+      isFigure,
+      carrier,
+      carry: createCarry({ limit: CARRY_LIMIT }),
+      sizing: createScreenPinch({ max: MAX_SCALE }),
+      circle: null,
+      depth: 0,
+    }
+    cats.push(entry)
+    // Someone standing on the card should be looking at whoever is holding it.
+    if (isFigure) turnToCamera(entry)
+    cat.reveal()
+    say(`${isFigure ? 'figure' : 'cat'} ${cats.length} of ${MAX_CATS}`)
+    return entry
+  }
+
+  /** Turns a model about the card's normal until it faces whoever is looking. */
+  function turnToCamera(entry) {
+    const { camera } = XR8.Threejs.xrScene()
+    frame.updateMatrixWorld(true)
+    const eye = frame.worldToLocal(camera.position.clone())
+    entry.cat.heading = headingToward({
+      x: eye.x - entry.carrier.position.x,
+      y: eye.y - entry.carrier.position.y,
+    })
+  }
+
+  /** Whichever cat a point on screen has landed on, nearest one first. */
+  function catUnder(point) {
+    if (!point) return null
+    let best = null
+    for (const entry of cats) {
+      if (!isTouching(point, entry.circle)) continue
+      if (!best || entry.depth < best.depth) best = entry
+    }
+    return best
+  }
+
+  /** Degrees the raw camera frame is turned by to match the display. */
+  const frameTurn = () => (turnOverride !== null ? Number(turnOverride) : -uiOrientation)
+
+  // --- hand control -------------------------------------------------------
+
   async function showCacheState() {
     if (!assets.available) {
-      handNote.textContent = 'Adds a 19 MB download'
+      handNote.textContent = '手で操作できます'
       return
     }
     const cached = await assets.isCached()
-    handNote.textContent = cached ? '19 MB cached on this device' : 'Adds a 19 MB download'
+    handNote.textContent = cached ? '手で操作できます（19MB 保存済み）' : '手で操作できます'
     handClear.hidden = !cached
   }
 
@@ -109,190 +350,82 @@ async function launch() {
     await assets.clear()
     handClear.hidden = true
     handClear.disabled = false
-    handNote.textContent = handTracker
-      ? 'Cache cleared — downloads again next visit'
-      : 'Adds a 19 MB download'
+    handNote.textContent = 'キャッシュを削除しました。次回また読み込みます'
   })
 
-  /** Stops reading the camera for hands without discarding the loaded model. */
-  function handControlOff() {
-    handOn = false
-    handSeen = false
-    touching = false
-    pinched = false
-    overlay.clear()
-    screenPinch.reset()
-    cat.setSize(1)
-    cat.setHighlight(0)
-    handButton.textContent = 'Enable hand control'
-    hintText.textContent = 'Swipe it to turn'
-    showCacheState()
-  }
-
-  function handControlOn() {
-    handOn = true
-    pointers.clear()
-    screenPinching = false
-    stopSwipe()
-    handButton.textContent = 'Turn hand control off'
-    hintText.textContent = 'Stroke it to turn'
-    handNote.textContent = 'Hand control on'
-  }
-
-  handButton.addEventListener('click', async () => {
-    if (handOn) return handControlOff()
-
-    // Already loaded once this session: switching back on costs nothing.
-    if (handTracker) return handControlOn()
-
-    handButton.disabled = true
-    handClear.hidden = true
+  /**
+   * Brings up hand tracking in the background. It is 19 MB, so the camera opens
+   * first and the page stays usable by touch whether this arrives or not.
+   */
+  async function startHandControl(XR8) {
+    hand.hidden = false
     try {
       await installAssetWorker()
-      handNote.textContent = 'Downloading… 0%'
       await assets.download((ratio) => {
-        handNote.textContent = `Downloading… ${Math.round(ratio * 100)}%`
+        const percent = Math.round(ratio * 100)
+        handNote.textContent = `ハンドトラッキングを読み込み中 ${percent}%`
+        guideHand.textContent = `ハンドトラッキングを読み込み中 ${percent}%`
       })
 
-      handNote.textContent = 'Starting hand control…'
-      const { loadHandTracker } = await import('./handControl.js')
+      handNote.textContent = 'ハンドトラッキングを起動しています'
+      const { loadHandTracker } = await import('../xr/handControl.js')
       handTracker = await loadHandTracker()
 
-      // Resolve everything before touching the UI, so the panel never shows a
-      // half-applied state.
-      const cached = await assets.isCached()
-      handButton.disabled = false
-      handClear.hidden = !cached
-      handControlOn()
-    } catch (error) {
-      handButton.disabled = false
-      handNote.textContent = `Hand control failed: ${error?.message ?? error}`
+      // Reading pixels back off the GPU costs a stall every frame, so the
+      // module only goes on once there is something to read them for.
+      XR8.addCameraPipelineModule(
+        XR8.CameraPixelArray.pipelineModule({ maxDimension: HAND_FRAME }),
+      )
+      say('hand control ready')
+      guideHand.hidden = true
       await showCacheState()
+    } catch (error) {
+      say('hand control failed:', error?.message ?? error)
+      handNote.textContent = `ハンドトラッキングを利用できません: ${error?.message ?? error}`
+      guideHand.textContent = '手での操作は利用できません。画面の操作はできます。'
     }
-  })
-
-  try {
-    await mindarThree.start()
-  } catch (error) {
-    startButton.disabled = false
-    const denied = error?.name === 'NotAllowedError'
-    setNote(
-      denied
-        ? 'カメラの使用が拒否されました。ブラウザの設定で許可してから、もう一度お試しください。'
-        : `開始できませんでした: ${error?.message ?? error}`,
-      true,
-    )
-    return
   }
 
-  intro.classList.add('is-gone')
-  hint.hidden = false
+  // --- touch --------------------------------------------------------------
 
-  // Nothing found after a while usually means lighting or angle, so say so
-  // rather than leaving the dot blinking indefinitely.
-  const nudge = setTimeout(() => {
-    if (!hint.classList.contains('is-found')) {
-      hintText.textContent = 'Try more light, or hold it face-on'
-    }
-  }, 20000)
-
-  if (debugging) {
-    debugPanel.hidden = false
-    headingPanel.hidden = false
-
-    // Lets the heading be measured against a real printed card, which is the
-    // only place the artwork and the model can actually be compared.
-    const stored = Number(localStorage.getItem(HEADING_KEY))
-    if (Number.isFinite(stored) && stored) cat.heading = stored
-    headingValue.textContent = `${cat.heading}°`
-
-    headingPanel.addEventListener('click', (event) => {
-      const turn = Number(event.target.dataset?.turn)
-      if (!turn) return
-      cat.heading = (((cat.heading + turn) % 360) + 360) % 360
-      headingValue.textContent = `${cat.heading}°`
-      localStorage.setItem(HEADING_KEY, String(cat.heading))
-    })
-  }
-  // How far the object's screen position moves between frames. With the camera
-  // still this should be near zero; anything else is the tracker stepping.
-  let jitter = 0
-  let lastCentre = null
-
-  // Frame rate, smoothed — the readout is the only way to see it on a phone.
-  let fps = 0
-  let fpsAt = performance.now()
-  let fpsFrames = 0
-
-  const smoother = createPoseSmoother({ rate: POSE_SMOOTHING })
-  const markerScale = new THREE.Vector3()
-  const markerNormal = new THREE.Vector3()
-  const objectPosition = new THREE.Vector3()
-  const toCamera = new THREE.Vector3()
-  const clipPlane = new THREE.Plane()
-  const clock = new THREE.Clock()
-
-  // The model climbs out from under the card, so whatever is still below the
-  // mark's plane must not be drawn.
-  renderer.localClippingEnabled = true
-  cat.applyClipping(clipPlane)
-
-  // A hand covering the mark and the camera being taken off it look identical
-  // to the tracker, so they are told apart by how long the loss lasts — and a
-  // hand in frame keeps the object regardless, since that is the occluding case.
-  //
-  // Tracking drops out constantly in ordinary use: a hand's shadow, motion
-  // blur, an awkward angle. Without hand control there is no hand to vouch for
-  // those, so the wait has to be long enough to ride them out — otherwise the
-  // model blinks away and comes back up out of the card over and over.
-  const HIDE_AFTER = 2000
-  let lostSince = -Infinity
-  let handSeen = false
-  let pinched = false
-
-  // Where the object sits on screen this frame; both the fingertip and a
-  // swiping thumb are measured against it.
-  let circle = null
-
-  /** Turns a swept angle into rotation about the model's upright axis. */
-  function spinBy(swept) {
-    if (!swept) return
-    // Screen y points down, so a sweep that reads clockwise turns the object
-    // negatively when the card is facing the lens.
+  /** Turns a swept angle into rotation about the mark's normal. */
+  function spinBy(entry, swept) {
+    if (!swept || !entry || !anchor) return
+    const { camera } = XR8.Threejs.xrScene()
     toCamera.subVectors(camera.position, objectPosition)
-    const facing = markerNormal.dot(toCamera) > 0 ? -1 : 1
-    cat.spin(swept * facing * SPIN_GAIN)
+    const facing = markNormal.dot(toCamera) > 0 ? -1 : 1
+    entry.cat.spin(swept * facing * SPIN_GAIN)
   }
-
-  // Until hand control is switched on, the same turntable answers to a swipe,
-  // and two fingers resize the model the way a touchscreen usually does.
-  const swipe = createStrokeTracker()
-  const screenPinch = createScreenPinch({ max: MAX_SCALE })
-  const pointers = new Map()
-  let swiping = false
-  let screenPinching = false
-
-  const pair = () => [...pointers.values()]
-  let handReadout = []
 
   const stopSwipe = () => {
     swiping = false
     swipe.update({ point: null, touching: false })
   }
 
+  const pair = () => [...pointers.values()]
+
   document.addEventListener('pointerdown', (event) => {
-    if (handOn || event.target.closest('button, a')) return
+    if (event.target.closest('button, a')) return
     const point = { x: event.clientX, y: event.clientY }
     pointers.set(event.pointerId, point)
 
     if (pointers.size === 2) {
-      // A second finger turns the gesture into a resize, not a turn.
       stopSwipe()
+      // Whatever is between the two fingers is what is being pinched; failing
+      // that, whichever one of them landed on something.
+      const [first, second] = pair()
+      pinchTarget =
+        catUnder({ x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 }) ??
+        catUnder(first) ??
+        catUnder(second)
+      if (!pinchTarget) return
       screenPinching = true
-      screenPinch.begin(...pair())
+      pinchTarget.sizing.begin(first, second)
       return
     }
-    if (pointers.size > 2 || !isTouching(point, circle)) return
+    if (pointers.size > 2) return
+    swipeTarget = catUnder(point)
+    if (!swipeTarget) return
     swiping = true
     swipe.update({ point, touching: true })
   })
@@ -302,7 +435,7 @@ async function launch() {
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
 
     if (screenPinching && pointers.size >= 2) {
-      cat.setSize(screenPinch.update(...pair()))
+      pinchTarget.cat.setSize(pinchTarget.sizing.update(...pair()))
       return
     }
     if (!swiping) return
@@ -310,164 +443,354 @@ async function launch() {
       point: { x: event.clientX, y: event.clientY },
       touching: true,
     })
-    spinBy(swirlAngle(from, to, circle))
+    spinBy(swipeTarget, swirlAngle(from, to, swipeTarget?.circle))
   })
 
   const liftPointer = (event) => {
     pointers.delete(event.pointerId)
     if (pointers.size < 2 && screenPinching) {
       screenPinching = false
-      screenPinch.end()
+      pinchTarget?.sizing.end()
+      pinchTarget = null
     }
-    if (pointers.size === 0) stopSwipe()
+    if (pointers.size === 0) {
+      stopSwipe()
+      swipeTarget = null
+    }
   }
   document.addEventListener('pointerup', liftPointer)
   document.addEventListener('pointercancel', liftPointer)
 
-  renderer.setAnimationLoop(() => {
-    const delta = clock.getDelta()
-
-    fpsFrames += 1
-    const nowMs = performance.now()
-    if (nowMs - fpsAt >= 500) {
-      fps = (fpsFrames * 1000) / (nowMs - fpsAt)
-      fpsAt = nowMs
-      fpsFrames = 0
-    }
-
-    // Follow the mark only while the tracker owns it. Once frozen — or once the
-    // mark is out of sight — the object simply stays where it was last seen.
-    // The tracker keeps running alongside the hand; the pose is only held
-    // still while a finger is on the object, where a partly covered mark would
-    // otherwise make it jitter.
-    if (!touching && anchor.group.visible) {
-      holder.matrix.copy(smoother.follow(anchor.group.matrix, delta))
-      holder.matrixWorldNeedsUpdate = true
-      holder.visible = true
-      lostSince = Infinity
-    }
-
-    cat.setPresent(
-      anchor.group.visible ||
-        handSeen ||
-        swiping ||
-        performance.now() - lostSince < HIDE_AFTER,
-    )
-    holder.updateMatrixWorld(true)
-    markerNormal.setFromMatrixColumn(holder.matrixWorld, 2).normalize()
-    objectPosition.setFromMatrixPosition(holder.matrixWorld)
-    clipPlane.setFromNormalAndCoplanarPoint(markerNormal, objectPosition)
-
-    const size = { width: window.innerWidth, height: window.innerHeight }
-    markerScale.setFromMatrixColumn(holder.matrixWorld, 0)
-    circle = holder.visible
-      ? screenCircle(cat.group, camera, cat.radius * markerScale.length(), size)
-      : null
-
-    if (circle) {
-      if (lastCentre) {
-        const moved = Math.hypot(circle.x - lastCentre.x, circle.y - lastCentre.y)
-        jitter = jitter * 0.9 + moved * 0.1
-      }
-      lastCentre = { x: circle.x, y: circle.y }
-    }
-
-    if (handOn && frame++ % DETECT_EVERY === 0) {
-      const landmarks = handTracker.detect(mindarThree.video, performance.now())
-      // Contact is judged on screen: the landmarks carry no depth that could
-      // place the finger in front of or behind the object.
-      const rect = videoRect(mindarThree.video)
-      const point = landmarks ? fingertip(landmarks, rect) : null
-      handSeen = Boolean(landmarks)
-      touching = isTouching(point, circle)
-
-      // Opening the fingers resizes the model, but only while they move
-      // slowly — the reading needs the real gap between detections, which is
-      // several render frames.
-      const now = performance.now()
-      const sinceDetect = lastDetectAt ? (now - lastDetectAt) / 1000 : 0
-      lastDetectAt = now
-      const { closed, scale, speed } = pinch.update(landmarks, sinceDetect)
-      pinched = closed
-      cat.setSize(scale)
-
-      // Rotation is confined to the mark's normal, so only how far the finger
-      // travelled *around* the object counts.
-      const { from, to } = stroke.update({ point, touching })
-      const swept = swirlAngle(from, to, circle)
-      spinBy(swept)
-
-      overlay.draw(landmarks, rect, { touching, pinched })
-      hint.classList.toggle('is-found', touching)
-      handReadout = [
-        `hand    ${landmarks ? 'yes' : 'no'}`,
-        `pinch   ${closed ? 'CLOSED' : 'open'}`,
-        `size    ${scale.toFixed(2)}x`,
-        `speed   ${speed.toFixed(1)}/s`,
-      ]
-    }
-
-    cat.setHighlight(touching || swiping || screenPinching ? 1 : 0)
-    cat.update(delta)
-
-    if (debugging) {
-      debugPanel.textContent = [
-        ...handReadout,
-        `swipe   ${swiping ? 'YES' : screenPinching ? 'PINCH' : 'no'}`,
-        `screen  ${screenPinch.scale.toFixed(2)}x`,
-        `touch   ${touching ? 'YES' : 'no'}`,
-        `turn    ${cat.turn}deg`,
-        `anim    ${cat.animationTime.toFixed(1)}s`,
-        `fps     ${fps.toFixed(0)}`,
-        `jitter  ${jitter.toFixed(2)}px/f`,
-        `pres    ${cat.presence.toFixed(2)}`,
-        `fit     r=${cat.radius.toFixed(2)} s=${cat.fitScale.toFixed(3)}`,
-        `object  ${circle ? `${circle.x.toFixed(0)},${circle.y.toFixed(0)} r${circle.r.toFixed(0)}` : '-'}`,
-      ].join('\n')
-    }
-    renderer.render(scene, camera)
-  })
-
-  anchor.onTargetLost = () => {
-    lostSince = performance.now()
-    hint.classList.remove('is-found')
-    hintText.textContent = 'Looking for the mark'
-  }
-
-  anchor.onTargetFound = () => {
-    clearTimeout(nudge)
-    hint.classList.add('is-found')
-    hintText.textContent = 'Mark found'
-
-    // Rise again only if it had actually gone; a stutter should not restart it.
-    if (cat.gone) {
-      // Take the new pose straight away rather than sliding in from the old.
-      smoother.reset()
-      cat.reveal()
-    }
-
-    // Offer hand control only once the mark has actually been registered.
-    if (hand.hidden) {
-      hand.hidden = false
-      showCacheState()
-    }
-  }
+  // --- pipeline -----------------------------------------------------------
 
   window.addEventListener('pagehide', () => {
-    renderer.setAnimationLoop(null)
     handTracker?.close()
     overlay.dispose()
-    mindarThree.stop()
-    cat.dispose()
+    cats.forEach((entry) => entry.cat.dispose())
+    catalogue.dispose()
+    figures.dispose()
+    XR8.stop()
   })
-}
 
+  // Everything that can be awaited is done before the button goes live, so
+  // the tap that starts the camera reaches XR8.run() in the same turn. An
+  // await in between spends the gesture, and the prompt never comes up.
+  startButton.disabled = false
+  setNote('カメラ映像は端末内で処理され、送信されません。')
+  startButton.addEventListener(
+    'click',
+    () => {
+      startButton.disabled = true
+      setNote('カメラを起動しています…')
+      // Out of the way at once. The engine puts its own permission and loading
+      // UI up from here, and an opaque panel over it reads as a dead button.
+      intro.classList.add('is-gone')
+      say('XR8.run() …')
+
+      XR8.XrController.configure({
+        disableWorldTracking: false,
+        // Without this the world has no size, and a mark measured in millimetres
+        // cannot be told apart from one measured in metres.
+        scale: 'absolute',
+        imageTargetData: [target],
+      })
+
+      XR8.addCameraPipelineModules([
+        XR8.GlTextureRenderer.pipelineModule(),
+        XR8.Threejs.pipelineModule(),
+        XR8.XrController.pipelineModule(),
+        XRExtras.FullWindowCanvas.pipelineModule(),
+        XRExtras.AlmostThere.pipelineModule(),
+        XRExtras.Loading.pipelineModule(),
+        XRExtras.RuntimeError.pipelineModule(),
+        XRExtras.PauseOnHidden.pipelineModule(),
+        {
+          name: 'orthogonal',
+
+          onStart: () => {
+            const { scene, renderer } = XR8.Threejs.xrScene()
+            scene.add(new THREE.AmbientLight(0xbcd6de, 1.1))
+            const key = new THREE.DirectionalLight(0xdff0f6, 2.2)
+            key.position.set(0.6, 1.4, 0.8)
+            scene.add(key)
+            const rim = new THREE.PointLight(0x8fd3e8, 3, 6)
+            rim.position.set(-0.8, 1, -0.4)
+            scene.add(rim)
+
+            // The model climbs out from under the card, so whatever is still below
+            // the mark's plane must not be drawn.
+            renderer.localClippingEnabled = true
+
+            hint.hidden = false
+            say('pipeline start')
+            startHandControl(XR8)
+
+          },
+
+          onCameraStatusChange: ({ status }) => {
+            say('camera:', status)
+            if (status === 'failed') {
+              intro.classList.remove('is-gone')
+              startButton.disabled = false
+              setNote('カメラを開始できませんでした。ブラウザの設定で許可してから、もう一度お試しください。', true)
+            }
+          },
+
+          onVideoSizeChange: ({ videoWidth, videoHeight, orientation }) => {
+            uiOrientation = orientation
+            overlay.resize()
+            say(`video ${videoWidth}x${videoHeight} rot ${orientation}`)
+          },
+
+          onException: (error) => {
+            say('EXCEPTION:', error?.message ?? error)
+            setNote(`エラー: ${error?.message ?? error}`, true)
+          },
+
+          onUpdate: ({ processCpuResult, processGpuResult }) => {
+            const delta = clock.getDelta()
+            status = processCpuResult?.reality?.trackingStatus ?? '-'
+
+            fpsFrames += 1
+            const now = performance.now()
+            if (now - fpsAt >= 500) {
+              fps = (fpsFrames * 1000) / (now - fpsAt)
+              fpsAt = now
+              fpsFrames = 0
+            }
+
+            if (!anchor) return
+            const { camera } = XR8.Threejs.xrScene()
+
+            // The card's plane, in world space: the clip that hides the buried part
+            // of the model, and the axis every stroke turns it about.
+            if (tracked) anchor.matrix.copy(smoother.follow(markPose, delta))
+            anchor.matrixWorldNeedsUpdate = true
+            anchor.updateMatrixWorld(true)
+            markNormal
+              .setFromMatrixColumn(anchor.matrixWorld, normalColumn)
+              .normalize()
+              .multiplyScalar(normalSign)
+            objectPosition.setFromMatrixPosition(anchor.matrixWorld)
+            clipPlane.setFromNormalAndCoplanarPoint(markNormal, objectPosition)
+
+            const viewport = { width: window.innerWidth, height: window.innerHeight }
+            for (const entry of cats) {
+              const { x, y, z } = entry.carry.update(delta)
+              entry.carrier.position.set(x, y, z)
+              entry.cat.group.updateMatrixWorld(true)
+              worldScale.setFromMatrixColumn(entry.cat.group.matrixWorld, 0)
+              entry.circle = screenCircle(
+                entry.cat.group,
+                camera,
+                entry.cat.radius * worldScale.length(),
+                viewport,
+              )
+              entry.depth = objectPosition
+                .setFromMatrixPosition(entry.cat.group.matrixWorld)
+                .distanceTo(camera.position)
+            }
+            // Reused above; put back what the clipping plane is measured from.
+            objectPosition.setFromMatrixPosition(anchor.matrixWorld)
+
+            if (handTracker && frames++ % DETECT_EVERY === 0) {
+              const pixels = processGpuResult?.camerapixelarray
+              if (pixels && cameraFrame.update(pixels, frameTurn())) {
+                const landmarks = handTracker.detect(cameraFrame.canvas, performance.now())
+                // Contact is judged on screen: the landmarks carry no depth that
+                // could place the finger in front of or behind the object.
+                const rect = coverRect(cameraFrame.shape, {
+                  width: window.innerWidth,
+                  height: window.innerHeight,
+                })
+                const point = landmarks ? fingertip(landmarks, rect) : null
+                handSeen = Boolean(landmarks)
+                hovered = catUnder(point)
+                touching = Boolean(hovered)
+
+                const sinceDetect = lastDetectAt ? (now - lastDetectAt) / 1000 : 0
+                lastDetectAt = now
+                // A hand pinch is how a cat is picked up, so it no longer
+                // resizes anything; two fingers on the glass still do.
+                const { closed, speed } = pinch.update(landmarks, sinceDetect)
+                pinched = closed
+
+                if (!closed) {
+                  if (holding) {
+                    holding.carry.release()
+                    // Carried clear of the card and set down: the mark has room
+                    // to produce another.
+                    const { x, y } = holding.carry.position
+                    if (Math.hypot(x, y) >= spawnDistance) addCat()
+                    holding = null
+                  }
+                } else {
+                  const target = holding ?? hovered
+                  const grip = target && point
+                    ? reach.at(point, {
+                        camera,
+                        frame,
+                        card: clipPlane,
+                        height: target.carry.position.z,
+                        unit: span,
+                        viewport,
+                      })
+                    : null
+                  if (grip) {
+                    if (holding) target.carry.moveTo(grip)
+                    else {
+                      target.carry.grab(grip)
+                      holding = target
+                      // Read once, acted on once.
+                      hideGuide()
+                    }
+                  }
+                }
+
+                overlay.draw(landmarks, rect, { touching, pinched })
+                hint.classList.toggle('is-found', touching || Boolean(holding))
+                hintText.textContent = holding
+                  ? '指を放すと置けます'
+                  : touching
+                    ? 'つまむと持ち上がります'
+                    : 'なぞると回転します'
+                handReadout = [
+                  `hand    ${landmarks ? 'yes' : 'no'}`,
+                  `pinch   ${closed ? 'CLOSED' : 'open'}`,
+                  `speed   ${speed.toFixed(1)}/s`,
+                  `frame   ${cameraFrame.shape.width}x${cameraFrame.shape.height} @${frameTurn()}deg`,
+                ]
+              }
+            }
+
+            for (const entry of cats) {
+              const lit =
+                entry === holding ||
+                entry === hovered ||
+                (swiping && entry === swipeTarget) ||
+                (screenPinching && entry === pinchTarget)
+              entry.cat.setHighlight(lit ? 1 : 0)
+              entry.cat.update(delta)
+            }
+
+            if (debugging) {
+              readout = [
+                ...handReadout,
+                `mark    ${(span * 1000).toFixed(1)}u (declared ${(markWidth * 1000).toFixed(0)})`,
+                `sight   ${sightings} ${tracked ? 'TRACKED' : 'held'}`,
+                `aspect  ${aspect.toFixed(3)} (printed 4:3 = 1.333)`,
+                `size    ${modelSize}x mark`,
+                `swipe   ${swiping ? 'YES' : screenPinching ? 'PINCH' : 'no'}`,
+                `sizes   ${cats.map((e) => e.sizing.scale.toFixed(2)).join(' ')}`,
+                `clip    ${cats.find((e) => e.isFigure)?.cat.clip ?? '-'}`,
+                `touch   ${touching ? 'YES' : 'no'}`,
+                `cats    ${cats.length}/${MAX_CATS} ${holding ? 'CARRYING' : 'free'}`,
+                `out     ${cats.map((e) => Math.hypot(e.carry.position.x, e.carry.position.y).toFixed(1)).join(' ')} (need ${spawnDistance})`,
+                `track   ${status}`,
+                `fps     ${fps.toFixed(0)}`,
+                `object  ${hovered?.circle ? `${hovered.circle.x.toFixed(0)},${hovered.circle.y.toFixed(0)} r${hovered.circle.r.toFixed(0)}` : '-'}`,
+              ]
+              paint()
+            }
+          },
+
+          listeners: [
+            {
+              event: 'reality.imageupdated',
+              process: ({ detail }) => noteMark(detail),
+            },
+            {
+              event: 'reality.imagelost',
+              // Frozen where it was last seen, and held there by SLAM.
+              process: () => {
+                tracked = false
+              },
+            },
+            {
+              event: 'reality.imagescanning',
+              process: () => {
+                if (!anchor) hintText.textContent = 'マークを探しています'
+              },
+            },
+            {
+              event: 'reality.imagefound',
+              process: ({ detail }) => {
+                const first = !anchor
+                noteMark(detail)
+                // Only the very first sighting is taken whole; a re-acquisition
+                // eases across so the model does not jump where SLAM has drifted.
+                if (first) smoother.reset()
+                if (!first) return
+
+                const { scene } = XR8.Threejs.xrScene()
+                anchor = new THREE.Group()
+                // One anchor unit is one mark width, which is what the model was
+                // fitted against — the same footing a MindAR anchor gives it.
+                // The pose is written straight onto the matrix each frame, so
+                // the first one goes on now rather than a frame late at origin.
+                anchor.matrixAutoUpdate = false
+                anchor.matrix.copy(markPose)
+
+                // Laid onto the card's normal once that has been measured, just
+                // below.
+                frame = new THREE.Group()
+                anchor.add(frame)
+                scene.add(anchor)
+
+                // The card is being looked at, or it could not have been found:
+                // its normal is the axis leaning nearest the camera, pointing
+                // the way the camera is.
+                anchor.updateMatrixWorld(true)
+                const { camera } = XR8.Threejs.xrScene()
+                const here = new THREE.Vector3().setFromMatrixPosition(anchor.matrixWorld)
+                const toCamera = new THREE.Vector3().subVectors(camera.position, here).normalize()
+                const lean = [0, 1, 2].map((column) =>
+                  new THREE.Vector3()
+                    .setFromMatrixColumn(anchor.matrixWorld, column)
+                    .normalize()
+                    .dot(toCamera),
+                )
+
+                // ?axis=auto takes whichever leans nearest the camera, which is
+                // only a fallback: the convention is fixed, and picking it per
+                // sighting wanders when the card is seen at a glancing angle.
+                normalColumn = COLUMN[normalAxis] ?? lean.reduce(
+                  (best, value, column) => (Math.abs(value) > Math.abs(lean[best]) ? column : best),
+                  0,
+                )
+                normalSign = lean[normalColumn] < 0 ? -1 : 1
+
+                // The model's own +Z is up out of the card, so the frame turns
+                // to put it on the normal we just measured.
+                frame.quaternion.setFromUnitVectors(
+                  UP,
+                  new THREE.Vector3().setComponent(normalColumn, normalSign),
+                )
+
+                say(`lean ${lean.map((v) => v.toFixed(2)).join(' ')}`,
+                    `| normal ${'xyz'[normalColumn]}${normalSign < 0 ? '-' : '+'}`)
+
+                addCat()
+                hint.classList.add('is-found')
+                showGuide()
+                hintText.textContent = 'なぞると回転します'
+              },
+            },
+          ],
+        },
+      ])
+
+      XR8.run({ canvas })
+    },
+    { once: true },
+  )
+}
 const reason = unsupportedReason()
 if (reason) {
   startButton.disabled = true
   setNote(reason, true)
 } else {
-  setNote('カメラ映像は端末内で処理され、送信されません。')
-  startButton.disabled = false
-  startButton.addEventListener('click', launch, { once: true })
+  prepare().catch((error) =>
+    setNote(`読み込みに失敗しました: ${error?.message ?? error}`, true),
+  )
 }

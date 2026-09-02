@@ -1,6 +1,6 @@
 import { Object3D, PerspectiveCamera, Plane, Vector3 } from 'three'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { createReach } from '../src/xr2/reach.js'
+import { createReach } from '../src/xr/reach.js'
 
 const VIEWPORT = { width: 100, height: 100 }
 

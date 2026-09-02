@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { headingToward } from '../src/xr2/facing.js'
+import { headingToward } from '../src/xr/facing.js'
 
 // Laying a Y-up model onto the card puts its front along the group's -Y, and
 // the heading turns it from there within the card's plane.

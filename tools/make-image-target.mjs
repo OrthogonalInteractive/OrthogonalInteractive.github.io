@@ -7,12 +7,11 @@
 import { createRequire } from 'node:module'
 import { writeFileSync } from 'node:fs'
 
-const require = createRequire(import.meta.resolve('mind-ar/package.json'))
-const { createCanvas, loadImage } = require('canvas')
+const { createCanvas, loadImage } = createRequire(import.meta.url)('canvas')
 
-const SOURCE = 'public/xr2/card-artwork.png'
-const TARGET = 'public/xr2/image-targets/card.png'
-const DESCRIPTOR = 'public/xr2/card-target.json'
+const SOURCE = 'public/xr/card-artwork.png'
+const TARGET = 'public/xr/image-targets/card.png'
+const DESCRIPTOR = 'public/xr/card-target.json'
 
 // 8th Wall wants 4:3, at least 640x480. Landscape, because the artwork is.
 const WIDTH = 640

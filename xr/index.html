@@ -8,57 +8,69 @@
     />
     <link rel="icon" type="image/png" href="/org-icon.png" />
     <title>Orthogonal Interactive — AR</title>
-    <meta name="description" content="名刺のマークにカメラを向けると、3Dオブジェクトが現れます。" />
+    <meta name="description" content="名刺のマークにカメラを向けると、3Dオブジェクトが現れ、その場に残ります。" />
     <meta name="theme-color" content="#0b1211" />
     <meta name="robots" content="noindex" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap"
-      rel="stylesheet"
-    />
+    <!-- The engine and its UI helpers are only distributed from 8th Wall's CDN.
+         `slam` is preloaded because world tracking starts the moment the camera
+         does, and fetching it then shows as a stall on the first frames. -->
+    <script
+      src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js"
+      async
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js"
+      async
+      crossorigin="anonymous"
+      data-preload-chunks="slam"
+    ></script>
   </head>
   <body>
     <div id="scene" class="stage"></div>
     <canvas id="overlay" class="overlay"></canvas>
     <pre id="debug" class="debug" hidden></pre>
-    <div id="heading" class="heading" hidden>
-      <button data-turn="-15" type="button">⟲</button>
-      <span id="heading-value">0°</span>
-      <button data-turn="15" type="button">⟳</button>
-    </div>
 
     <div id="intro" class="panel">
       <img class="panel__mark" src="/org-icon.png" alt="" width="88" height="88" />
       <h1 class="panel__title">このモデルをカメラに写してください</h1>
       <!-- Kept on one line: a newline here collapses to a space, which shows
            as a gap after the Japanese full stop. -->
-      <p class="panel__body">カメラの使用を許可したあと、印刷されたマークを画面に収めてください。その上に3Dオブジェクトが現れます。</p>
-      <!-- Enabled by main.js: the bundle is large, and a tap before it loads
-           would silently do nothing. -->
+      <p class="panel__body">カメラの使用を許可したあと、印刷されたマークを画面に収めてください。その上に3Dオブジェクトが現れ、置いた場所に残ります。</p>
       <button id="start" class="panel__button" type="button" disabled>
         カメラを開始
       </button>
       <p id="note" class="panel__note">読み込み中…</p>
     </div>
 
+    <!-- Shown once the mark is found, and gone as soon as something has been
+         picked up: nobody wants to read the same card twice. -->
+    <div id="guide" class="guide" hidden>
+      <p class="guide__lead">手をカメラに写してください</p>
+      <p class="guide__line">
+        <b>人さし指と親指でつまむ</b>と、モデルを持ち上げて動かせます。指を放すと、その場に置かれます。
+      </p>
+      <p class="guide__line guide__line--dim">画面をなぞると回転、2本指で拡大・縮小できます。</p>
+      <p id="guide-hand" class="guide__line guide__line--dim">ハンドトラッキングを準備しています…</p>
+      <button id="guide-close" class="guide__close" type="button">閉じる</button>
+    </div>
+
     <p id="hint" class="hint" hidden>
-      <span class="hint__dot"></span><span id="hint-text">Looking for the mark</span>
+      <span class="hint__dot"></span><span id="hint-text">マークを探しています</span>
     </p>
 
+    <!-- Hand tracking loads on its own; this only reports where it has got to
+         and offers the 19 MB back. -->
     <div id="hand" class="hand" hidden>
-      <button id="hand-enable" class="hand__button" type="button">
-        Enable hand control
-      </button>
       <p class="hand__note">
-        <span id="hand-note">Adds a 19 MB download</span>
+        <span id="hand-note">ハンドトラッキングを読み込み中</span>
         <button id="hand-clear" class="hand__clear" type="button" hidden>
-          Clear cache
+          キャッシュを削除
         </button>
       </p>
     </div>
 
-    <a class="back" href="/">← orthogonalinteractive.github.io</a>
+    <a class="back" href="/">← サイトに戻る</a>
 
     <script type="module" src="/src/xr/main.js"></script>
   </body>

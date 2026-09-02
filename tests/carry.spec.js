@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createCarry } from '../src/xr2/carry.js'
+import { createCarry } from '../src/xr/carry.js'
 
 const run = (carry, seconds, step = 1 / 60) => {
   let last

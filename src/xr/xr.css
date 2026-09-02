@@ -14,19 +14,13 @@ body {
 .stage {
   position: fixed;
   inset: 0;
-  background: var(--ink-900);
   /* A swipe turns the model; the browser must not scroll or zoom instead. */
   touch-action: none;
 }
 
-/* MindAR injects the camera feed and canvas as absolutely positioned children,
-   with sizes of its own. The SLAM page appends a bare canvas instead, which has
-   to be told to fill the stage — inline styles keep MindAR's own out of this. */
-.stage video,
-.stage canvas {
-  object-fit: cover;
-}
-
+/* The engine sizes and places its own canvas for the window; the stage only has
+   to give it somewhere to be. Painting a background behind it, or cropping it
+   with object-fit, hides a camera feed that is running perfectly well. */
 .stage > canvas {
   position: absolute;
   inset: 0;
@@ -259,4 +253,80 @@ body {
 .hand__clear:hover {
   color: var(--cyan);
   border-bottom-color: var(--cyan);
+}
+
+/* Japanese runs through these, and the mark's own styling was written for
+   spaced-out Latin capitals. */
+.hint,
+.hand__note {
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+.guide {
+  position: fixed;
+  z-index: 12;
+  top: max(1rem, env(safe-area-inset-top));
+  left: max(1rem, env(safe-area-inset-left));
+  right: max(1rem, env(safe-area-inset-right));
+  max-width: 26rem;
+  margin-inline: auto;
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem 1.1rem 0.8rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  background: rgba(11, 18, 17, 0.84);
+  backdrop-filter: blur(10px);
+  transition: opacity 0.45s var(--ease);
+}
+
+.guide.is-gone {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.guide__lead {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--cyan);
+}
+
+.guide__line {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.7;
+  color: var(--fg);
+}
+
+.guide__line b {
+  font-weight: 500;
+  color: var(--cyan);
+}
+
+.guide__line--dim {
+  font-size: 0.74rem;
+  color: var(--fg-faint);
+}
+
+.guide__close {
+  justify-self: end;
+  padding: 0.35rem 0.9rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  background: none;
+  font: inherit;
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+}
+
+/* The hint carries a Japanese sentence rather than two spaced-out words, and
+   on a phone it runs straight into the link in the opposite corner. */
+.hint {
+  max-width: calc(100% - 9rem);
+}
+
+.back {
+  letter-spacing: 0.04em;
 }
