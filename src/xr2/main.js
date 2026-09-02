@@ -11,6 +11,7 @@ import { swirlAngle } from '../xr/swirl.js'
 import { unsupportedReason } from '../xr/support.js'
 import { createCameraFrame } from './cameraFrame.js'
 import { createCarry } from './carry.js'
+import { headingToward } from './facing.js'
 import { createReach } from './reach.js'
 import { markerSpan } from './marker.js'
 import { coverRect } from './view.js'
@@ -44,6 +45,10 @@ const MAX_CATS = 6
 const TINTS = [0x8fd3e8, 0x9fe8bd, 0xc3a8f2, 0xf2d489, 0xf29fae]
 
 const FIGURE_URL = '/xr2/figure.glb'
+
+// Second one out, and half again the size the fitting rule alone would give it.
+const FIGURE_AT = 1
+const FIGURE_SCALE = 1.5
 
 // Its light is real rather than painted on, so it wants far less of itself fed
 // back as emission than the cat does.
@@ -151,7 +156,11 @@ async function prepare() {
   const [target, catalogue, figures] = await Promise.all([
     fetch(TARGET_URL).then((response) => response.json()),
     loadFigureFactory({ size: modelSize }),
-    loadFigureFactory({ url: FIGURE_URL, size: modelSize, glow: FIGURE_GLOW }),
+    loadFigureFactory({
+      url: FIGURE_URL,
+      size: modelSize * FIGURE_SCALE,
+      glow: FIGURE_GLOW,
+    }),
   ])
   say(`target & model ready | w ${(markWidth * 1000).toFixed(0)}mm | s ${modelSize}x`,
       `| axis ${normalAxis} | out ${spawnDistance}`)
@@ -237,11 +246,13 @@ async function prepare() {
   /** Stands another cat on the mark, if there is room for one. */
   function addCat() {
     if (!frame || cats.length >= MAX_CATS) return null
-    // The last one out is the odd one: a different model, in its own colours.
-    const last = cats.length === MAX_CATS - 1
-    const cat = last
+    // One of them is not a cat, and keeps its own colours. The rest take a
+    // shade each, counted among themselves so no two share one.
+    const isFigure = cats.length === FIGURE_AT
+    const shades = cats.filter((entry) => !entry.isFigure).length
+    const cat = isFigure
       ? figures.create()
-      : catalogue.create({ tint: TINTS[cats.length % TINTS.length] })
+      : catalogue.create({ tint: TINTS[shades % TINTS.length] })
     cat.heading = heading
     cat.applyClipping(clipPlane)
 
@@ -254,6 +265,7 @@ async function prepare() {
     // last one's scale.
     const entry = {
       cat,
+      isFigure,
       carrier,
       carry: createCarry({ limit: CARRY_LIMIT }),
       sizing: createScreenPinch({ max: MAX_SCALE }),
@@ -261,9 +273,22 @@ async function prepare() {
       depth: 0,
     }
     cats.push(entry)
+    // Someone standing on the card should be looking at whoever is holding it.
+    if (isFigure) turnToCamera(entry)
     cat.reveal()
-    say(`cat ${cats.length} of ${MAX_CATS}`)
+    say(`${isFigure ? 'figure' : 'cat'} ${cats.length} of ${MAX_CATS}`)
     return entry
+  }
+
+  /** Turns a model about the card's normal until it faces whoever is looking. */
+  function turnToCamera(entry) {
+    const { camera } = XR8.Threejs.xrScene()
+    frame.updateMatrixWorld(true)
+    const eye = frame.worldToLocal(camera.position.clone())
+    entry.cat.heading = headingToward({
+      x: eye.x - entry.carrier.position.x,
+      y: eye.y - entry.carrier.position.y,
+    })
   }
 
   /** Whichever cat a point on screen has landed on, nearest one first. */
