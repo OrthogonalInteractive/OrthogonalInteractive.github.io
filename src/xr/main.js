@@ -137,6 +137,7 @@ const handClear = document.querySelector('#hand-clear')
 const debugPanel = document.querySelector('#debug')
 const guide = document.querySelector('#guide')
 const guideHand = document.querySelector('#guide-hand')
+const visits = document.querySelector('#visits')
 
 const assets = createAssetStore({ urls: HAND_ASSETS, cacheName: HAND_CACHE })
 
@@ -523,6 +524,26 @@ async function prepare() {
   // await in between spends the gesture, and the prompt never comes up.
   startButton.disabled = false
   setNote('カメラ映像は端末内で処理され、送信されません。')
+
+  // Counted here rather than when the camera starts: opening the page is the
+  // visit, whether or not anyone goes on to tap. Nothing waits for it — the
+  // engine and the model are already down by now, so it competes with nothing,
+  // and the panel it fills in is the one being read.
+  countVisit({
+    config: visitLog,
+    id: visitorId(),
+    connect: (config) => import('./firestore.js').then((m) => m.connectVisitLog(config)),
+  }).then((counted) => {
+    if (!counted) return
+    say(`visit ${counted.total} | unique ${counted.unique}`)
+    visits.textContent = [
+      `通算 ${counted.total.toLocaleString('ja-JP')} 回`,
+      `${counted.unique.toLocaleString('ja-JP')} 台`,
+      `この端末 ${counted.mine.toLocaleString('ja-JP')} 回`,
+    ].join(' ・ ')
+    visits.hidden = false
+  })
+
   startButton.addEventListener(
     'click',
     () => {
@@ -570,17 +591,6 @@ async function prepare() {
             hint.hidden = false
             say('pipeline start')
             startHandControl(XR8)
-
-            // After the camera, never before it: a number nobody reads is not
-            // worth a frame of the thing people came for.
-            countVisit({
-              config: visitLog,
-              id: visitorId(),
-              connect: (config) =>
-                import('./firestore.js').then((m) => m.connectVisitLog(config)),
-            }).then((counted) => {
-              if (counted) say(`visit ${counted.total} | unique ${counted.unique}`)
-            })
 
           },
 

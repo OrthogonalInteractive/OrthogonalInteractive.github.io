@@ -33,6 +33,7 @@ export async function connectVisitLog(config) {
         const first = !seen.exists()
         const total = (tally.data()?.total ?? 0) + 1
         const unique = (tally.data()?.unique ?? 0) + (first ? 1 : 0)
+        const mine = (seen.data()?.visits ?? 0) + 1
 
         tx.set(
           visitor,
@@ -45,7 +46,7 @@ export async function connectVisitLog(config) {
         )
         tx.set(totals, { total, unique }, { merge: true })
 
-        return { total, unique, first }
+        return { total, unique, mine, first }
       })
     },
 

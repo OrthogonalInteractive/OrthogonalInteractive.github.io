@@ -330,3 +330,12 @@ body {
 .back {
   letter-spacing: 0.04em;
 }
+
+/* The tally, on the panel people are reading before they start the camera. */
+.panel__visits {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  color: var(--fg-faint);
+}
