@@ -4,10 +4,23 @@ Vue 3 + Vite の1ページ構成のポートフォリオサイト。配色は組
 `public/org-icon.png` から採ったダークスレート × シアンで、同じアイコンを
 ページ全体の固定背景にウォーターマークとして敷いている。
 
-構成は `About / Services` の2セクションのみ。屋号 `Orthogonal Interactive` を表の名義とし、
+構成は `About / Services / Work` の3セクション。屋号 `Orthogonal Interactive` を表の名義とし、
 代表者名などの事業者情報は About セクションの定義リストに置いている。
 メールアドレスも About の定義リストに含めている（GitHub はヘッダのみ）。
-実績セクションは現時点では設けていない。
+
+Work は実績を並べるセクションで、いまは名刺 AR の1件のみ。実機の画面録画
+（`public/work/namecard-ar.mp4`、H.264 720x1614 / 30fps / 無音 / 3.8 MB）を
+`preload="none"` とポスター画像で置いているので、**再生を押した人だけが 3.8 MB を取りに行く**。
+元の録画は VP9 を MP4 に入れたもので Safari では再生できないため、H.264 に変換してある。
+差し替えるときも同じ変換を通すこと:
+
+```bash
+ffmpeg -i <source.mp4> -vf "fps=30,scale=720:-2" -c:v libx264 -profile:v high \
+  -pix_fmt yuv420p -crf 28 -preset slow -movflags +faststart -an \
+  public/work/namecard-ar.mp4
+ffmpeg -ss 20 -i <source.mp4> -frames:v 1 -vf "scale=720:-2" -q:v 4 \
+  public/work/namecard-ar.jpg
+```
 
 ## AR ページ（`/xr/`）
 
@@ -207,6 +220,8 @@ src/App.vue 内 .backdrop        ロゴのウォーターマーク背景
 src/components/AboutSection.vue    経歴と事業者情報（Name / Principal / Founded /
                                    Based in / Email）
 src/components/ServicesSection.vue 提供サービス4種
+src/components/WorkSection.vue      実績（いまは名刺 AR の1件）
+public/work/                        実績の画面録画とポスター画像
 src/composables/useReveal.js   スクロール連動のフェードイン
 public/org-icon.png            ロゴ／favicon
 ```
@@ -214,6 +229,7 @@ public/org-icon.png            ロゴ／favicon
 編集ポイント:
 
 - コピー文言は各 `*Section.vue` の `<script setup>` 冒頭の配列
+- 実績は `WorkSection.vue` の `pieces`（配列に足せばそのまま下に並ぶ）
 - 事業者情報は `AboutSection.vue` の `facts`
 - 色は `src/style.css` の `:root`
 - 連絡先も `AboutSection.vue` の `facts`（`href` を持つ行がリンクになる）

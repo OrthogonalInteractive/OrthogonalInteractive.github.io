@@ -12,15 +12,22 @@ describe('portfolio page', () => {
     expect(wrapper.text()).toContain('Interactive')
   })
 
-  it('is reduced to About and Services', () => {
+  it('runs About, Services and Work', () => {
     const wrapper = mount(App)
     const labels = wrapper.findAll('nav a[href^="#"]').map((link) => link.text())
 
-    expect(labels).toEqual(['About', 'Services'])
+    expect(labels).toEqual(['About', 'Services', 'Work'])
     expect(wrapper.find('#about').exists()).toBe(true)
     expect(wrapper.find('#services').exists()).toBe(true)
-    expect(wrapper.find('#work').exists()).toBe(false)
+    expect(wrapper.find('#work').exists()).toBe(true)
     expect(wrapper.find('#contact').exists()).toBe(false)
+  })
+
+  it('closes on the work, so the services are read before the proof', () => {
+    const wrapper = mount(App)
+    const ids = [...wrapper.find('main').element.children].map((el) => el.id)
+
+    expect(ids).toEqual(['about', 'services', 'work'])
   })
 
   it('drops the hero screen and opens on About', () => {
