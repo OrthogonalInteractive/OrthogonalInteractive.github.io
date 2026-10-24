@@ -4,28 +4,34 @@ import { createTimeline } from './timeline.js'
 
 const MODEL_URL = '/cat.glb'
 
-// Seconds the cat lies still before it first stirs, and between naps after.
-const WAIT_SECONDS = 18
-
 // A crossfade between matching poses only needs to hide the change of clip.
-// Idle and Sit start far apart, so the change to and from Sit gets longer.
+// Sit and Walk start some way from Idle, so changes to and from them get longer.
 const FADE_SECONDS = 0.25
 const FAR_FADE_SECONDS = 0.8
-const FAR_APART = ['Sit']
+const FAR_APART = ['Sit', 'Walk']
 
-// How far the frame is aimed from the sleeping cat toward the standing one,
-// and how much room is left around the sleeping cat.
-const RISE = 0.6
-const MARGIN = 1.35
+// Room left around the cat beyond the furthest any of its poses reaches.
+const MARGIN = 1.05
 
-// At rest the cat lies with its paws out front, as in the mark: that is
-// partway into LieDown, and the same pose comes partway through GetUp, which
-// plays LieDown backwards. Measured off public/cat.glb.
-const REST = { name: 'LieDown', at: 1.0667 }
-const ACTS = [{ name: 'GetUp', from: 0.7667 }, 'Idle', 'Sit', 'Idle', { name: 'LieDown', to: REST.at }]
+// Up and about, with a lie-down now and then. Lying, the paws are out front as
+// in the mark: that is partway into LieDown, and the same pose comes partway
+// through GetUp, which plays LieDown backwards. Measured off public/cat.glb.
+const LYING = 1.0667
+const ACTS = [
+  'Idle',
+  'Walk',
+  'Idle',
+  'Sit',
+  'Idle',
+  'Walk',
+  'Idle',
+  { name: 'LieDown', to: LYING },
+  { name: 'LieDown', still: true, from: LYING, seconds: 10 },
+  { name: 'GetUp', from: 0.7667 },
+]
 
-// Looking down at the lying cat from the side its face is turned to, as the
-// mark was drawn: head to the lower left, back and tail off to the right.
+// Looking down at the cat from the side its face is turned to, as the mark was
+// drawn: head to the lower left, back and tail off to the right.
 const VIEW = new THREE.Vector3(0.9, 0.75, 1).normalize()
 
 // The mark's colours: a dark, faintly lit body under a glowing cyan mesh.
@@ -76,15 +82,14 @@ function dress(root) {
   })
 }
 
-/** Bounds over the poses each clip passes through, or at the times given. */
-function reach(root, mixer, clips, times) {
+/** Bounds over the poses each clip passes through. */
+function reach(root, mixer, clips) {
   const box = new THREE.Box3()
   clips.forEach((clip) => {
     const action = mixer.clipAction(clip)
     action.play()
-    const at = times ?? [0, 1, 2, 3, 4].map((i) => (clip.duration * i) / 4)
-    for (const time of at) {
-      action.time = time
+    for (let i = 0; i <= 4; i += 1) {
+      action.time = (clip.duration * i) / 4
       mixer.update(0)
       root.updateMatrixWorld(true)
       box.union(new THREE.Box3().setFromObject(root, true))
@@ -122,16 +127,13 @@ export async function mountCat(host, { onReady = () => {} } = {}) {
   const clips = Object.fromEntries(gltf.animations.map((clip) => [clip.name, clip]))
   const timeline = createTimeline(
     gltf.animations.map((clip) => ({ name: clip.name, duration: clip.duration })),
-    { wait: WAIT_SECONDS, rest: REST, acts: ACTS },
+    { acts: ACTS },
   )
 
-  // Framed on the resting cat, so at rest it fills the mark the way the
-  // drawing does. Standing up it grows out past that, and the frame is aimed
-  // partway up to give its head somewhere to go.
-  const asleep = reach(root, mixer, [clips[REST.name]], [REST.at])
-  const awake = reach(root, mixer, timeline.plan.map((step) => clips[step.name]))
-  const centre = asleep.getCenter(new THREE.Vector3()).lerp(awake.getCenter(new THREE.Vector3()), RISE)
-  const radius = asleep.getBoundingSphere(new THREE.Sphere()).radius * MARGIN
+  // Framed on every pose it takes, so walking, sitting or lying it stays whole.
+  const bounds = reach(root, mixer, timeline.plan.map((step) => clips[step.name]))
+  const centre = bounds.getCenter(new THREE.Vector3())
+  const radius = bounds.getBoundingSphere(new THREE.Sphere()).radius * MARGIN
 
   const camera = new THREE.PerspectiveCamera(30, 1, radius / 10, radius * 20)
   const distance = radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2))

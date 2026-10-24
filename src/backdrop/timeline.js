@@ -4,39 +4,31 @@ import { wholeLoops } from '../xr/sequence.js'
 const TRANSITIONS = ['GetUp', 'LieDown']
 
 /**
- * The backdrop cat's day: lying perfectly still for `wait` seconds, so it
- * passes for the printed mark, then up through `acts` and back down to the
- * same still pose, round and round.
+ * The backdrop cat's day: `acts` in order, round and round.
  *
- * `rest` names the clip whose pose it holds, and how far into that clip (`at`)
- * the pose is taken. An act can likewise start partway in (`from`) or stop
- * early (`to`), which is how a wake-up can begin from that pose and a lie-down
- * end on it, so neither end of the waking spell shows a join.
+ * An act is a clip's name, or an object that can start it partway in (`from`)
+ * or stop it early (`to`). A `still` act holds the clip's pose at `from` for
+ * `seconds`, which is how the cat lies down for a while: a lie-down that stops
+ * on that pose and a wake-up that starts from it leave no join either side.
  */
-export function createTimeline(
-  clips,
-  { wait = 20, hold = 5, rest = 'Sleep', acts = ['GetUp', 'Idle', 'Sit', 'Idle', 'LieDown'] } = {},
-) {
+export function createTimeline(clips, { hold = 5, acts = ['Idle'] } = {}) {
   const byName = new Map(clips.map((clip) => [clip.name, clip]))
-  const still = typeof rest === 'string' ? { name: rest, at: 0 } : rest
 
-  const plan = [
-    { name: still.name, still: true, once: false, from: still.at, seconds: wait },
-    ...acts
-      .map((act) => (typeof act === 'string' ? { name: act } : act))
-      .filter((act) => byName.has(act.name))
-      .map(({ name, from = 0, to }) => {
-        const { duration } = byName.get(name)
-        const once = TRANSITIONS.includes(name)
-        return {
-          name,
-          still: false,
-          once,
-          from,
-          seconds: once ? (to ?? duration) - from : duration * wholeLoops(duration, hold),
-        }
-      }),
-  ]
+  const plan = acts
+    .map((act) => (typeof act === 'string' ? { name: act } : act))
+    .filter((act) => byName.has(act.name))
+    .map(({ name, from = 0, to, still = false, seconds = hold }) => {
+      const { duration } = byName.get(name)
+      if (still) return { name, still, once: false, from, seconds }
+      const once = TRANSITIONS.includes(name)
+      return {
+        name,
+        still,
+        once,
+        from,
+        seconds: once ? (to ?? duration) - from : duration * wholeLoops(duration, hold),
+      }
+    })
 
   let index = 0
   let elapsed = 0

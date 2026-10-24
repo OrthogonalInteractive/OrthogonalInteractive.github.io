@@ -12,14 +12,20 @@ const CLIPS = [
   { name: 'Walk', duration: 1.07 },
 ]
 
-const ACTS = ['GetUp', 'Idle', 'Sit', 'Idle', 'LieDown']
+// Up and about, with a lie-down now and then: held partway into LieDown, where
+// the paws are out front, and woken from the same pose partway through GetUp.
+const ACTS = [
+  'Idle',
+  'Walk',
+  'Idle',
+  'Sit',
+  'Idle',
+  { name: 'LieDown', to: 1.07 },
+  { name: 'LieDown', still: true, from: 1.07, seconds: 10 },
+  { name: 'GetUp', from: 0.77 },
+]
 
-// Lying with the paws out front, as in the mark: partway into LieDown, and the
-// same pose partway through GetUp.
-const REST = { name: 'LieDown', at: 1.07 }
-const LYING = [{ name: 'GetUp', from: 0.77 }, 'Idle', 'Sit', 'Idle', { name: 'LieDown', to: 1.07 }]
-
-function run(timeline, seconds, step = 0.1) {
+function run(timeline, seconds, step = 0.05) {
   const seen = []
   for (let t = 0; t < seconds; t += step) {
     const next = timeline.update(step)
@@ -29,56 +35,43 @@ function run(timeline, seconds, step = 0.1) {
 }
 
 describe('createTimeline', () => {
-  it('opens on the sleeping pose held still, so it reads as a picture', () => {
-    const timeline = createTimeline(CLIPS, { wait: 20, acts: ACTS })
-    expect(timeline.current).toMatchObject({ name: 'Sleep', still: true })
+  it('opens on its feet and moving', () => {
+    const timeline = createTimeline(CLIPS, { hold: 5, acts: ACTS })
+    expect(timeline.current).toMatchObject({ name: 'Idle', still: false })
   })
 
-  it('stays still for the whole wait', () => {
-    const timeline = createTimeline(CLIPS, { wait: 20, acts: ACTS })
-    expect(run(timeline, 19.9)).toEqual([])
-  })
+  it('runs the acts in order and comes round again', () => {
+    const timeline = createTimeline(CLIPS, { hold: 5, acts: ACTS })
+    const lap = timeline.plan.reduce((sum, item) => sum + item.seconds, 0)
 
-  it('wakes after the wait and runs the acts in order', () => {
-    const timeline = createTimeline(CLIPS, { wait: 20, hold: 5, acts: ACTS })
-    expect(run(timeline, 20 + 1.73 + 6 + 6 + 6 + 0.5)).toEqual([
-      'GetUp',
+    expect(run(timeline, lap + 0.5)).toEqual([
+      'Walk',
       'Idle',
       'Sit',
       'Idle',
       'LieDown',
+      'LieDown:still',
+      'GetUp',
+      'Idle',
     ])
   })
 
-  it('goes back to sleep and holds still again once lain down', () => {
-    const timeline = createTimeline(CLIPS, { wait: 20, hold: 5, acts: ACTS })
-    const seen = run(timeline, 20 + 1.73 + 6 * 3 + 1.73 + 0.5)
-    expect(seen.at(-1)).toBe('Sleep:still')
-    expect(timeline.current.still).toBe(true)
-  })
-
-  it('plays transitions once and holds the rest for whole loops', () => {
-    const plan = createTimeline(CLIPS, { wait: 20, hold: 5, acts: ACTS }).plan
+  it('holds whole loops of the clips it stays in', () => {
+    const plan = createTimeline(CLIPS, { hold: 5, acts: ACTS }).plan
     const get = (name) => plan.find((item) => item.name === name)
 
-    expect(get('GetUp')).toMatchObject({ once: true, seconds: 1.73 })
-    expect(get('LieDown')).toMatchObject({ once: true, seconds: 1.73 })
     expect(get('Idle').seconds).toBe(6)
     expect(get('Sit').seconds).toBe(6)
+    expect(get('Walk').seconds).toBeCloseTo(1.07 * 5)
   })
 
-  it('drops an act the model does not have rather than stalling on it', () => {
-    const timeline = createTimeline(CLIPS, { wait: 1, acts: ['GetUp', 'Dance', 'LieDown'] })
-    expect(timeline.plan.map((item) => item.name)).toEqual(['Sleep', 'GetUp', 'LieDown'])
+  it('lies still for as long as asked, on the pose partway into the clip', () => {
+    const rest = createTimeline(CLIPS, { hold: 5, acts: ACTS }).plan.find((item) => item.still)
+    expect(rest).toMatchObject({ name: 'LieDown', from: 1.07, seconds: 10 })
   })
 
-  it('can rest partway through a clip, held still there', () => {
-    const timeline = createTimeline(CLIPS, { wait: 20, rest: REST, acts: LYING })
-    expect(timeline.current).toMatchObject({ name: 'LieDown', still: true, from: 1.07 })
-  })
-
-  it('wakes from partway through a clip and lies down only as far as the rest', () => {
-    const plan = createTimeline(CLIPS, { wait: 20, rest: REST, acts: LYING }).plan
+  it('plays transitions once, starting or stopping partway when asked', () => {
+    const plan = createTimeline(CLIPS, { hold: 5, acts: ACTS }).plan
     const getUp = plan.find((item) => item.name === 'GetUp')
     const lieDown = plan.find((item) => item.name === 'LieDown' && !item.still)
 
@@ -86,5 +79,10 @@ describe('createTimeline', () => {
     expect(getUp.seconds).toBeCloseTo(1.73 - 0.77)
     expect(lieDown).toMatchObject({ once: true, from: 0 })
     expect(lieDown.seconds).toBeCloseTo(1.07)
+  })
+
+  it('drops an act the model does not have rather than stalling on it', () => {
+    const timeline = createTimeline(CLIPS, { acts: ['Idle', 'Dance', 'Sit'] })
+    expect(timeline.plan.map((item) => item.name)).toEqual(['Idle', 'Sit'])
   })
 })
