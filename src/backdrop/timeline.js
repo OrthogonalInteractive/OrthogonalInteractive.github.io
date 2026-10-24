@@ -4,31 +4,36 @@ import { wholeLoops } from '../xr/sequence.js'
 const TRANSITIONS = ['GetUp', 'LieDown']
 
 /**
- * The backdrop cat's day: asleep and perfectly still for `wait` seconds, so it
+ * The backdrop cat's day: lying perfectly still for `wait` seconds, so it
  * passes for the printed mark, then up through `acts` and back down to the
  * same still pose, round and round.
  *
- * The still pose is the first frame of `rest`, which is where GetUp starts and
- * LieDown ends, so neither end of the waking spell shows a join.
+ * `rest` names the clip whose pose it holds, and how far into that clip (`at`)
+ * the pose is taken. An act can likewise start partway in (`from`) or stop
+ * early (`to`), which is how a wake-up can begin from that pose and a lie-down
+ * end on it, so neither end of the waking spell shows a join.
  */
 export function createTimeline(
   clips,
   { wait = 20, hold = 5, rest = 'Sleep', acts = ['GetUp', 'Idle', 'Sit', 'Idle', 'LieDown'] } = {},
 ) {
   const byName = new Map(clips.map((clip) => [clip.name, clip]))
+  const still = typeof rest === 'string' ? { name: rest, at: 0 } : rest
 
   const plan = [
-    { name: rest, still: true, once: false, seconds: wait },
+    { name: still.name, still: true, once: false, from: still.at, seconds: wait },
     ...acts
-      .filter((name) => byName.has(name))
-      .map((name) => {
+      .map((act) => (typeof act === 'string' ? { name: act } : act))
+      .filter((act) => byName.has(act.name))
+      .map(({ name, from = 0, to }) => {
         const { duration } = byName.get(name)
         const once = TRANSITIONS.includes(name)
         return {
           name,
           still: false,
           once,
-          seconds: once ? duration : duration * wholeLoops(duration, hold),
+          from,
+          seconds: once ? (to ?? duration) - from : duration * wholeLoops(duration, hold),
         }
       }),
   ]

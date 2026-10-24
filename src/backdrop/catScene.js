@@ -18,11 +18,18 @@ const FAR_APART = ['Sit']
 const RISE = 0.6
 const MARGIN = 1.35
 
-// Looking down at the cat from its front-left, as the mark was drawn.
-const VIEW = new THREE.Vector3(-0.9, 0.75, 1).normalize()
+// At rest the cat lies with its paws out front, as in the mark: that is
+// partway into LieDown, and the same pose comes partway through GetUp, which
+// plays LieDown backwards. Measured off public/cat.glb.
+const REST = { name: 'LieDown', at: 1.0667 }
+const ACTS = [{ name: 'GetUp', from: 0.7667 }, 'Idle', 'Sit', 'Idle', { name: 'LieDown', to: REST.at }]
+
+// Looking down at the lying cat from the side its face is turned to, as the
+// mark was drawn: head to the lower left, back and tail off to the right.
+const VIEW = new THREE.Vector3(0.9, 0.75, 1).normalize()
 
 // The mark's colours: a dark, faintly lit body under a glowing cyan mesh.
-const BODY = 0x6f8a8e
+const BODY = 0x9cbcc0
 const WIRE = 0x7fdcff
 
 /** Whether this browser should get the moving cat rather than the still mark. */
@@ -40,12 +47,16 @@ function dress(root) {
     color: BODY,
     flatShading: true,
     roughness: 0.85,
+    // Pushed back a touch so the mesh lines sit cleanly on the faces.
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
   })
   const wire = new THREE.MeshBasicMaterial({
     color: WIRE,
     wireframe: true,
     transparent: true,
-    opacity: 0.75,
+    opacity: 0.45,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
   })
@@ -65,14 +76,15 @@ function dress(root) {
   })
 }
 
-/** Bounds over the poses each clip passes through. */
-function reach(root, mixer, clips) {
+/** Bounds over the poses each clip passes through, or at the times given. */
+function reach(root, mixer, clips, times) {
   const box = new THREE.Box3()
   clips.forEach((clip) => {
     const action = mixer.clipAction(clip)
     action.play()
-    for (let i = 0; i <= 4; i += 1) {
-      action.time = (clip.duration * i) / 4
+    const at = times ?? [0, 1, 2, 3, 4].map((i) => (clip.duration * i) / 4)
+    for (const time of at) {
+      action.time = time
       mixer.update(0)
       root.updateMatrixWorld(true)
       box.union(new THREE.Box3().setFromObject(root, true))
@@ -99,22 +111,24 @@ export async function mountCat(host, { onReady = () => {} } = {}) {
 
   const scene = new THREE.Scene()
   scene.add(root)
-  scene.add(new THREE.HemisphereLight(0x9fe8ff, 0x0b1211, 1.2))
-  const key = new THREE.DirectionalLight(0xbff2ff, 1.4)
-  key.position.set(-2, 3, 2)
+  // Low fill and a strong key from above the camera's shoulder, so each facet
+  // takes its own shade and the low-poly body reads as a shape, not a blur.
+  scene.add(new THREE.HemisphereLight(0x9fe8ff, 0x0b1211, 0.35))
+  const key = new THREE.DirectionalLight(0xdff8ff, 2.6)
+  key.position.copy(VIEW).add(new THREE.Vector3(-0.6, 1.2, 0))
   scene.add(key)
 
   const mixer = new THREE.AnimationMixer(root)
   const clips = Object.fromEntries(gltf.animations.map((clip) => [clip.name, clip]))
   const timeline = createTimeline(
     gltf.animations.map((clip) => ({ name: clip.name, duration: clip.duration })),
-    { wait: WAIT_SECONDS },
+    { wait: WAIT_SECONDS, rest: REST, acts: ACTS },
   )
 
-  // Framed on the sleeping cat, so at rest it fills the mark the way the
+  // Framed on the resting cat, so at rest it fills the mark the way the
   // drawing does. Standing up it grows out past that, and the frame is aimed
   // partway up to give its head somewhere to go.
-  const asleep = reach(root, mixer, [clips[timeline.current.name]])
+  const asleep = reach(root, mixer, [clips[REST.name]], [REST.at])
   const awake = reach(root, mixer, timeline.plan.map((step) => clips[step.name]))
   const centre = asleep.getCenter(new THREE.Vector3()).lerp(awake.getCenter(new THREE.Vector3()), RISE)
   const radius = asleep.getBoundingSphere(new THREE.Sphere()).radius * MARGIN
@@ -129,6 +143,7 @@ export async function mountCat(host, { onReady = () => {} } = {}) {
     action.reset()
     action.setLoop(step.once ? THREE.LoopOnce : THREE.LoopRepeat, Infinity)
     action.clampWhenFinished = step.once
+    action.time = step.from
     action.paused = step.still
     action.play()
     // Shows on the element which part of the day the cat is in, for anyone
@@ -163,7 +178,13 @@ export async function mountCat(host, { onReady = () => {} } = {}) {
     // not leap the cat through everything it missed.
     const delta = Math.min(clock.getDelta(), 0.1)
     const next = timeline.update(delta)
-    if (next) {
+    if (next && next.name === current.getClip().name) {
+      // Lying down stops on the very pose it rests in, so the clip just halts.
+      current.time = next.from
+      current.paused = next.still
+      host.dataset.step = next.still ? `${next.name}:still` : next.name
+      fading = delta
+    } else if (next) {
       const far = FAR_APART.includes(next.name) || FAR_APART.includes(current.getClip().name)
       const action = play(next)
       fading = far ? FAR_FADE_SECONDS : FADE_SECONDS
