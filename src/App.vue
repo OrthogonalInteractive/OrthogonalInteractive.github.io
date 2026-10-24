@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import SiteHeader from './components/SiteHeader.vue'
 import AboutSection from './components/AboutSection.vue'
 import ServicesSection from './components/ServicesSection.vue'
@@ -8,13 +8,34 @@ import { useReveal } from './composables/useReveal'
 
 const root = ref(null)
 useReveal(root)
+
+// The mark comes to life where the browser can manage it; everywhere else, and
+// until the model has loaded, the still image stands in.
+const stage = ref(null)
+const awake = ref(false)
+let teardown = null
+
+onMounted(async () => {
+  const { canAnimate, mountCat } = await import('./backdrop/catScene.js')
+  if (!canAnimate() || !stage.value) return
+  try {
+    teardown = await mountCat(stage.value, { onReady: () => (awake.value = true) })
+  } catch (error) {
+    console.warn('Backdrop cat stays still:', error)
+  }
+})
+
+onBeforeUnmount(() => teardown?.())
 </script>
 
 <template>
   <div ref="root" class="page">
     <!-- The mark, blown up as a fixed watermark behind the whole page. -->
     <div class="backdrop" aria-hidden="true">
-      <img class="backdrop__mark" src="/org-icon.png" alt="" />
+      <div class="backdrop__art">
+        <img class="backdrop__mark" :class="{ 'is-hidden': awake }" src="/org-icon.png" alt="" />
+        <div ref="stage" class="backdrop__stage" :class="{ 'is-shown': awake }" />
+      </div>
       <div class="backdrop__veil" />
     </div>
 
@@ -49,11 +70,12 @@ useReveal(root)
   pointer-events: none;
 }
 
-.backdrop__mark {
+.backdrop__art {
   position: absolute;
   right: -3vw;
   bottom: -6vh;
   width: min(46vw, 600px);
+  aspect-ratio: 1;
   /* Screen keeps the wireframe glow; the radial mask dissolves the PNG's own
      rectangular ground so it never reads as a pasted-on box. */
   mix-blend-mode: screen;
@@ -64,6 +86,34 @@ useReveal(root)
     rgba(0, 0, 0, 0.6) 55%,
     transparent 78%
   );
+}
+
+.backdrop__mark,
+.backdrop__stage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transition: opacity 1.2s var(--ease);
+}
+
+.backdrop__mark.is-hidden {
+  opacity: 0;
+}
+
+.backdrop__stage {
+  opacity: 0;
+  filter: drop-shadow(0 0 6px rgba(127, 220, 255, 0.55));
+}
+
+.backdrop__stage.is-shown {
+  opacity: 1;
+}
+
+.backdrop__stage :deep(canvas) {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .backdrop__veil {
@@ -81,7 +131,7 @@ useReveal(root)
    everything at a low opacity, and the panels above it turn translucent so it
    reads through them. Kept faint enough to leave body text legible. */
 @media (max-width: 880px) {
-  .backdrop__mark {
+  .backdrop__art {
     right: 50%;
     bottom: -10vh;
     width: min(150vw, 700px);

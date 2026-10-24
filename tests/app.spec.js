@@ -37,8 +37,11 @@ describe('portfolio page', () => {
     expect(wrapper.find('main').element.firstElementChild.id).toBe('about')
   })
 
-  it('carries no rendered 3D scene', () => {
+  it('keeps the still mark where the cat cannot be animated', () => {
+    // jsdom has no WebGL, as a browser without it would not.
     const wrapper = mount(App)
+    expect(wrapper.find('.backdrop__mark').exists()).toBe(true)
+    expect(wrapper.find('.backdrop__mark').classes()).not.toContain('is-hidden')
     expect(wrapper.find('canvas').exists()).toBe(false)
   })
 
