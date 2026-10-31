@@ -15,11 +15,10 @@ const facts = [
 
 <template>
   <section id="about" class="section">
-    <div class="grid-veil" />
     <div class="shell about">
       <div class="about__body">
         <div class="section__head reveal">
-          <h2 class="section__title">
+          <h2 class="section__title about__title">
             Building interactive 3D and XR/Metaverse content.
           </h2>
         </div>
@@ -47,7 +46,6 @@ const facts = [
                 :rel="fact.external ? 'noopener' : undefined"
               >
                 {{ fact.value }}
-                <span class="facts__arrow" aria-hidden="true">↗</span>
               </a>
               <template v-else>{{ fact.value }}</template>
             </dd>
@@ -62,63 +60,55 @@ const facts = [
 .about {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
   gap: clamp(2.5rem, 6vw, 5rem);
+  /* The facts keep to the top, leaving the floor below them to the cat. */
   align-items: start;
 }
 
+/* The page opens here, so this heading does the work a hero would. */
+.about__title {
+  font-size: clamp(2.5rem, 5.4vw, 4.1rem);
+  line-height: 1.02;
+}
+
 .about__copy {
-  display: grid;
-  gap: 1.25rem;
-  max-width: 36rem;
+  max-width: 34rem;
   color: var(--fg-muted);
-  font-weight: 300;
-  transition-delay: 0.08s;
+  font-size: 1.05rem;
 }
 
 .about__side {
-  display: grid;
-  gap: 1.75rem;
-  padding: 1.75rem;
-  border: 1px solid var(--line-soft);
-  border-radius: 16px;
-  background: linear-gradient(180deg, var(--ink-700), var(--ink-800));
-  transition-delay: 0.16s;
+  padding-top: 0.6rem;
 }
-
 
 .facts {
   display: grid;
-  gap: 0.85rem;
   margin: 0;
   padding: 0;
 }
 
 .facts__row {
   display: grid;
-  grid-template-columns: 5.5rem minmax(0, 1fr);
+  grid-template-columns: 6rem minmax(0, 1fr);
   align-items: baseline;
   gap: 1rem;
-  padding-bottom: 0.85rem;
-  border-bottom: 1px solid var(--line-soft);
+  padding: 0.7rem 0;
+  border-top: 1px solid var(--line-soft);
 }
 
-.facts__row:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
+.facts__row:first-child {
+  border-top: none;
 }
 
 .facts__term {
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--steel);
+  font-size: 0.8rem;
+  color: var(--fg-faint);
 }
 
 .facts__value {
   margin: 0;
-  font-size: 0.92rem;
+  font-size: 0.95rem;
   color: var(--fg);
   overflow-wrap: anywhere;
 }
@@ -127,38 +117,20 @@ const facts = [
   display: inline-flex;
   align-items: baseline;
   gap: 0.45rem;
-  border-bottom: 1px solid transparent;
-  transition: color 0.25s var(--ease), border-color 0.25s var(--ease);
+  color: var(--wire);
+  border-bottom: 1px solid var(--wire-dim);
+  transition: border-color 0.25s var(--ease), text-shadow 0.25s var(--ease);
 }
 
 .facts__link:hover {
-  color: var(--cyan);
-  border-bottom-color: var(--cyan);
-}
-
-.facts__arrow {
-  font-size: 0.7em;
-  color: var(--cyan);
-  transition: transform 0.25s var(--ease);
-}
-
-.facts__link:hover .facts__arrow {
-  transform: translate(2px, -2px);
+  border-bottom-color: var(--wire);
+  text-shadow: 0 0 12px var(--wire-glow);
 }
 
 @media (max-width: 880px) {
   .about {
     grid-template-columns: 1fr;
-  }
-
-  /* Let the fixed mark read through the panel on narrow screens. */
-  .about__side {
-    background: linear-gradient(
-      180deg,
-      rgba(22, 33, 31, 0.58),
-      rgba(11, 18, 17, 0.58)
-    );
-    backdrop-filter: blur(2px);
+    align-items: start;
   }
 }
 </style>

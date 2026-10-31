@@ -1,25 +1,21 @@
 <script setup>
 const services = [
   {
-    index: '01',
     title: 'Real-time scenes',
     body: 'Low-poly and photoreal alike — modelling, shading, and lighting tuned to a fixed frame budget rather than an offline render.',
     tags: ['Unity', 'URP', 'Shader Graph'],
   },
   {
-    index: '02',
     title: 'Interaction design',
     body: 'Camera work, hit testing, and motion that make a scene feel like an instrument instead of a video.',
     tags: ['C#', 'Input System', 'XR'],
   },
   {
-    index: '03',
     title: 'XR/Metaverse',
     body: 'Shared 3D spaces, on a headset or a flat screen — avatars, networked state, and the world building that keeps them running with people inside.',
     tags: ['Netcode', 'Avatars', 'Worlds'],
   },
   {
-    index: '04',
     title: 'Pipelines & tooling',
     body: 'Asset pipelines, build automation, and editor tooling so a project stays fast and maintainable long after launch.',
     tags: ['Editor tools', 'Profiling', 'CI'],
@@ -32,21 +28,15 @@ const services = [
     <div class="shell">
       <div class="section__head reveal">
         <h2 class="section__title">What I take on</h2>
-        <div class="rule" />
         <p class="section__lede">
           Interactive 3D content development, centred on Unity and taken on in
           four overlapping areas — usually more than one on the same project.
         </p>
       </div>
 
-      <div class="cards">
-        <article
-          v-for="(item, i) in services"
-          :key="item.index"
-          class="card reveal"
-          :style="{ transitionDelay: `${i * 70}ms` }"
-        >
-          <span class="card__index">{{ item.index }}</span>
+      <div class="cards reveal">
+        <article v-for="item in services" :key="item.title" class="card">
+          <div class="edge" aria-hidden="true" />
           <h3 class="card__title">{{ item.title }}</h3>
           <p class="card__body">{{ item.body }}</p>
           <ul class="tags">
@@ -59,96 +49,41 @@ const services = [
 </template>
 
 <style scoped>
+/* The four areas overlap rather than follow one another, so they sit side by
+   side, each under its own wire edge, with no order implied. */
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
-  gap: 1px;
-  background: var(--line-soft);
-  border: 1px solid var(--line-soft);
-  border-radius: 16px;
-  overflow: hidden;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(2.25rem, 4vw, 3.25rem) clamp(2rem, 5vw, 4.5rem);
+  max-width: 62rem;
 }
 
 .card {
-  position: relative;
   display: grid;
   align-content: start;
-  gap: 0.85rem;
-  padding: 2rem 1.75rem 1.9rem;
-  background: var(--ink-800);
-  transition: opacity 0.7s var(--ease), transform 0.7s var(--ease),
-    background 0.35s var(--ease);
+  gap: 0.75rem;
 }
 
-.card::before {
-  content: '';
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 1px;
-  background: var(--cyan);
-  transform: scaleY(0);
-  transform-origin: top;
-  transition: transform 0.4s var(--ease);
-}
-
-.card:hover {
-  background: var(--ink-700);
-}
-
-.card:hover::before {
-  transform: scaleY(1);
-}
-
-.card__index {
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.2em;
-  color: var(--steel);
+.card .edge {
+  margin-bottom: 0.6rem;
 }
 
 .card__title {
-  font-size: 1.15rem;
+  font-size: 1.45rem;
 }
 
 .card__body {
+  max-width: 30rem;
   color: var(--fg-muted);
-  font-weight: 300;
-  font-size: 0.92rem;
 }
 
-.tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  margin: 0.35rem 0 0;
-  padding: 0;
-  list-style: none;
+.card .tags {
+  margin-top: 0.15rem;
 }
 
-.tags__item {
-  font-family: var(--font-mono);
-  font-size: 0.63rem;
-  letter-spacing: 0.1em;
-  padding: 0.25rem 0.55rem;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  color: var(--fg-faint);
-}
-
-/* Narrow screens: the cards sit over the fixed mark, so they let it through. */
-@media (max-width: 880px) {
+@media (max-width: 720px) {
   .cards {
-    background: rgba(37, 52, 48, 0.55);
-    border-color: rgba(37, 52, 48, 0.55);
-  }
-
-  .card {
-    background: rgba(11, 18, 17, 0.55);
-    backdrop-filter: blur(2px);
-  }
-
-  .card:hover {
-    background: rgba(22, 33, 31, 0.66);
+    grid-template-columns: 1fr;
   }
 }
 </style>

@@ -46,7 +46,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
           target="_blank"
           rel="noopener"
         >
-          GitHub ↗
+          GitHub
         </a>
       </nav>
 
@@ -73,7 +73,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
 }
 
 .masthead.is-lifted {
-  background: rgba(11, 18, 17, 0.82);
+  background: rgba(19, 27, 24, 0.78);
   backdrop-filter: blur(14px);
   border-bottom-color: var(--line-soft);
 }
@@ -95,20 +95,19 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
 .brand__mark {
   width: 30px;
   height: 30px;
-  border-radius: 7px;
-  border: 1px solid var(--line);
-  box-shadow: 0 0 0 0 var(--cyan-dim);
+  border-radius: 50%;
   transition: box-shadow 0.4s var(--ease);
 }
 
 .brand:hover .brand__mark {
-  box-shadow: 0 0 22px -2px var(--cyan-dim);
+  box-shadow: 0 0 18px 0 var(--wire-dim);
 }
 
 .brand__name {
-  font-size: 0.9rem;
+  font-family: var(--font-display);
+  font-size: 1rem;
   font-weight: 500;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
 }
 
 .nav {
@@ -119,7 +118,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
 
 .nav__link {
   position: relative;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   color: var(--fg-muted);
   transition: color 0.25s var(--ease);
 }
@@ -131,7 +130,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
   bottom: -6px;
   width: 100%;
   height: 1px;
-  background: var(--cyan);
+  background: var(--wire);
   transform: scaleX(0);
   transform-origin: left;
   transition: transform 0.3s var(--ease);
@@ -146,19 +145,18 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
 }
 
 .nav__github {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.1em;
-  padding: 0.5rem 0.9rem;
-  border: 1px solid var(--line);
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 0.4rem 0.95rem;
+  border: 1px solid var(--wire-glow);
   border-radius: 999px;
-  color: var(--cyan);
-  transition: border-color 0.25s var(--ease), background 0.25s var(--ease);
+  color: var(--wire);
+  transition: background 0.25s var(--ease), box-shadow 0.25s var(--ease);
 }
 
 .nav__github:hover {
-  border-color: var(--cyan);
-  background: var(--cyan-dim);
+  background: var(--wire-dim);
+  box-shadow: 0 0 16px -2px var(--wire-glow);
 }
 
 .burger {
@@ -193,7 +191,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
     align-items: flex-start;
     gap: 1.1rem;
     padding: 1.4rem;
-    background: rgba(11, 18, 17, 0.96);
+    background: rgba(19, 27, 24, 0.96);
     border: 1px solid var(--line-soft);
     border-radius: 12px;
     display: none;
