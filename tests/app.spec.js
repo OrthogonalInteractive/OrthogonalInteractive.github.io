@@ -53,9 +53,18 @@ describe('portfolio page', () => {
     expect(wrapper.findAll('.eyebrow')).toHaveLength(0)
   })
 
+  // With no hero, the About heading is the page's own heading.
+  it('carries one h1, the About heading', () => {
+    const wrapper = mount(App)
+    const headings = wrapper.findAll('h1')
+
+    expect(headings).toHaveLength(1)
+    expect(wrapper.find('#about h1').exists()).toBe(true)
+  })
+
   it('names XR alongside the metaverse in the About heading', () => {
     const wrapper = mount(App)
-    expect(wrapper.find('#about h2').text()).toContain('XR/Metaverse')
+    expect(wrapper.find('#about h1').text()).toContain('XR/Metaverse')
   })
 
   it('lists the business facts in the About section', () => {
