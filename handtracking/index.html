@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <link rel="icon" type="image/png" href="/org-icon.png" />
+    <title>Orthogonal Interactive — Hand tracking</title>
+    <meta name="robots" content="noindex" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <video id="feed" class="ht__feed" playsinline muted></video>
+    <canvas id="overlay" class="ht__overlay"></canvas>
+
+    <section id="intro" class="ht__intro">
+      <h1 class="ht__title">Hand tracking</h1>
+      <p class="ht__lead">
+        カメラに両手を写し、親指と人差し指をつまむと、両手のつまんだ点のあいだに線が引かれます。
+      </p>
+      <button id="start" class="ht__button" type="button">カメラを開始</button>
+      <p class="ht__small">初回は手検出モデル（約 18 MB）を読み込みます。映像は端末の外へ送信しません。</p>
+    </section>
+
+    <p id="status" class="ht__status" hidden></p>
+
+    <script type="module" src="/src/handtracking/main.js"></script>
+  </body>
+</html>

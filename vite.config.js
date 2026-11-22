@@ -11,12 +11,13 @@ export default defineConfig({
   plugins: [vue()],
   build: {
     rollupOptions: {
-      // Further entries so GitHub Pages serves the AR page at /xr/ and its
-      // visit count at /xr/stats/.
+      // Further entries so GitHub Pages serves the AR page at /xr/, its
+      // visit count at /xr/stats/ and the hand-tracking demo at /handtracking/.
       input: {
         main: entry('index.html'),
         xr: entry('xr/index.html'),
         stats: entry('xr/stats/index.html'),
+        handtracking: entry('handtracking/index.html'),
       },
     },
   },
