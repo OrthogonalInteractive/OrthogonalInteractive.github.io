@@ -21,8 +21,7 @@ export function createPinchTracker({ closeRatio = 0.3, openRatio = 0.45 } = {}) 
   return {
     /**
      * @param hands `[{ side, landmarks }]`, side being MediaPipe's handedness
-     * @returns `{ hands: [...{ side, landmarks, pinched, point }], line }`, where
-     *   line is the two pinch points while two hands are pinched, else null
+     * @returns `[{ side, landmarks, pinched, point }]`
      */
     update(hands) {
       const next = new Map()
@@ -33,10 +32,7 @@ export function createPinchTracker({ closeRatio = 0.3, openRatio = 0.45 } = {}) 
         return { side, landmarks, pinched, point: pinchPoint(landmarks) }
       })
       closed = next
-
-      const pinching = tracked.filter((h) => h.pinched)
-      const line = pinching.length >= 2 ? [pinching[0].point, pinching[1].point] : null
-      return { hands: tracked, line }
+      return tracked
     },
   }
 }

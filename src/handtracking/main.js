@@ -1,9 +1,14 @@
 import './style.css'
+import { createInstrument } from './audio.js'
 import { coverRect, toScreen } from './cover.js'
 import { createPinchTracker } from './pinch.js'
+import { noteName } from './scale.js'
+import { createStringBoard } from './strings.js'
+import { displacement } from './vibration.js'
 
 // Shared with the AR page, which vendors them (see `npm run fetch:hand-assets`).
 const ASSET_DIR = '/xr/mediapipe'
+const INDEX_TIP = 8
 
 // MediaPipe's 21-point hand, as bone pairs grouped by finger.
 const FINGERS = [
@@ -16,6 +21,11 @@ const FINGERS = [
 const PALM = [[5, 9], [9, 13], [13, 17]]
 const TIPS = [4, 8, 12, 16, 20]
 const PINCH_COLOUR = '#ffffff'
+
+// One colour per note of the pentatonic scale, by pitch class.
+const NOTE_COLOURS = { 0: '#8fd3e8', 2: '#7fd99a', 4: '#e8c34a', 7: '#c59be8', 9: '#e88f8f' }
+const SEGMENTS = 32
+const SWING_PX = 28
 
 const video = document.getElementById('feed')
 const canvas = document.getElementById('overlay')
@@ -105,18 +115,61 @@ function drawHand(hand, rect) {
   }
 }
 
-function drawLine([from, to], rect) {
-  const a = toScreen(from, rect, { mirrored: true })
-  const b = toScreen(to, rect, { mirrored: true })
+function drawString(string, held, now) {
+  const { a, b } = string
+  const length = Math.hypot(b.x - a.x, b.y - a.y) || 1
+  const normal = { x: -(b.y - a.y) / length, y: (b.x - a.x) / length }
+  const age = string.pluck ? now - string.pluck.time : Infinity
+  const colour = NOTE_COLOURS[string.midi % 12]
+  const ringing = age < 1.5
+
   context.save()
-  context.shadowColor = '#8fd3e8'
-  context.shadowBlur = 24
-  context.strokeStyle = PINCH_COLOUR
-  context.lineWidth = 6
-  segment(a, b)
+  context.strokeStyle = colour
+  context.lineWidth = held ? 6 : 4
+  context.shadowColor = colour
+  context.shadowBlur = ringing ? 26 : 10
+  context.beginPath()
+  for (let i = 0; i <= SEGMENTS; i += 1) {
+    const s = i / SEGMENTS
+    const offset = Number.isFinite(age) ? displacement(s, string.pluck, age) * SWING_PX : 0
+    const x = a.x + (b.x - a.x) * s + normal.x * offset
+    const y = a.y + (b.y - a.y) * s + normal.y * offset
+    if (i === 0) context.moveTo(x, y)
+    else context.lineTo(x, y)
+  }
+  context.stroke()
   context.restore()
-  dot(a, 10, PINCH_COLOUR)
-  dot(b, 10, PINCH_COLOUR)
+
+  dot(a, 6, colour)
+  dot(b, 6, colour)
+  label(noteName(string.midi), { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, normal, colour)
+}
+
+function drawDraft(draft) {
+  context.save()
+  context.setLineDash([14, 10])
+  context.strokeStyle = PINCH_COLOUR
+  context.lineWidth = 4
+  context.shadowColor = '#8fd3e8'
+  context.shadowBlur = 18
+  segment(draft.a, draft.b)
+  context.restore()
+  dot(draft.a, 10, PINCH_COLOUR)
+  dot(draft.b, 10, PINCH_COLOUR)
+  const length = Math.hypot(draft.b.x - draft.a.x, draft.b.y - draft.a.y) || 1
+  const normal = { x: -(draft.b.y - draft.a.y) / length, y: (draft.b.x - draft.a.x) / length }
+  const mid = { x: (draft.a.x + draft.b.x) / 2, y: (draft.a.y + draft.b.y) / 2 }
+  label(noteName(draft.midi), mid, normal, PINCH_COLOUR)
+}
+
+function label(text, at, normal, colour) {
+  // Above the line, whichever way the line runs.
+  const side = normal.y > 0 ? -1 : 1
+  context.font = '500 15px "JetBrains Mono", ui-monospace, monospace'
+  context.textAlign = 'center'
+  context.textBaseline = 'middle'
+  context.fillStyle = colour
+  context.fillText(text, at.x + normal.x * 22 * side, at.y + normal.y * 22 * side)
 }
 
 function segment(a, b) {
@@ -133,34 +186,60 @@ function dot(p, radius, colour) {
   context.fill()
 }
 
-function run(landmarker) {
+function run(landmarker, instrument) {
   const tracker = createPinchTracker()
-  let lastTime = -1
+  const board = createStringBoard()
+  let lastVideoTime = -1
+  let hands = []
+  let rect = null
 
   const frame = () => {
     requestAnimationFrame(frame)
-    if (video.readyState < 2 || video.currentTime === lastTime) return
-    lastTime = video.currentTime
+    const now = performance.now() / 1000
 
-    const result = landmarker.detectForVideo(video, performance.now())
-    const { hands, line } = tracker.update(handsOf(result))
-    const rect = coverRect({ width: video.videoWidth, height: video.videoHeight }, screen)
+    // Track only on a new camera frame; draw every frame so strings keep moving.
+    if (video.readyState >= 2 && video.currentTime !== lastVideoTime) {
+      lastVideoTime = video.currentTime
+      const result = landmarker.detectForVideo(video, performance.now())
+      hands = tracker.update(handsOf(result))
+      rect = coverRect({ width: video.videoWidth, height: video.videoHeight }, screen)
+
+      const onScreen = hands.map((h) => ({
+        side: h.side,
+        pinched: h.pinched,
+        point: toScreen(h.point, rect, { mirrored: true }),
+        tip: toScreen(h.landmarks[INDEX_TIP], rect, { mirrored: true }),
+      }))
+      for (const event of board.update(onScreen, { ...screen, time: now })) {
+        const { string } = event
+        if (event.type === 'add') instrument.prepare(string.frequency)
+        if (event.type === 'pluck') {
+          const centre = ((string.a.x + string.b.x) / 2 / screen.width) * 2 - 1
+          instrument.pluck(string.frequency, event.strength, centre * 0.7)
+        }
+      }
+
+      const count = board.strings.length
+      say(
+        board.draft
+          ? `${noteName(board.draft.midi)} — 片手を離すと弦が残ります`
+          : hands.length === 0
+            ? '手をカメラに写してください'
+            : count === 0
+              ? '両手でつまんで広げ、片手を離して弦を張る'
+              : `弦 ${count} 本 — 人差し指ではじく`,
+      )
+    }
 
     context.clearRect(0, 0, screen.width, screen.height)
-    for (const hand of hands) drawHand(hand, rect)
-    if (line) drawLine(line, rect)
-
-    const pinching = hands.filter((h) => h.pinched).length
-    say(
-      hands.length === 0
-        ? '手をカメラに写してください'
-        : line
-          ? '両手でつまんでいます'
-          : `検出 ${hands.length} 手 / つまみ ${pinching}`,
-    )
+    for (const string of board.strings) drawString(string, board.isHeld(string), now)
+    if (board.draft) drawDraft(board.draft)
+    if (rect) for (const hand of hands) drawHand(hand, rect)
   }
   requestAnimationFrame(frame)
 }
+
+let instrument = null
 
 async function start() {
   startButton.disabled = true
@@ -168,12 +247,14 @@ async function start() {
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error('このブラウザではカメラを使えません（HTTPS で開いてください）')
     }
+    // Created inside the click, before any await, so Safari lets it play.
+    instrument ??= createInstrument()
     startButton.textContent = 'カメラを起動中…'
     await openCamera()
     startButton.textContent = 'モデルを読み込み中…'
     const landmarker = await loadLandmarker()
     intro.hidden = true
-    run(landmarker)
+    run(landmarker, instrument)
   } catch (error) {
     startButton.disabled = false
     startButton.textContent = 'もう一度試す'

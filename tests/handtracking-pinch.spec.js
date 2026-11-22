@@ -21,33 +21,33 @@ describe('pinchPoint', () => {
 describe('createPinchTracker', () => {
   it('reports a hand as pinched once the tips close', () => {
     const tracker = createPinchTracker()
-    const { hands: [h] } = tracker.update([{ side: 'Left', landmarks: hand(0.02) }])
+    const [h] = tracker.update([{ side: 'Left', landmarks: hand(0.02) }])
     expect(h.pinched).toBe(true)
   })
 
   it('reports an open hand as not pinched', () => {
     const tracker = createPinchTracker()
-    const { hands: [h] } = tracker.update([{ side: 'Left', landmarks: hand(0.15) }])
+    const [h] = tracker.update([{ side: 'Left', landmarks: hand(0.15) }])
     expect(h.pinched).toBe(false)
   })
 
   it('holds a pinch while the gap hovers between the thresholds', () => {
     const tracker = createPinchTracker()
     tracker.update([{ side: 'Left', landmarks: hand(0.02) }])
-    const { hands: [h] } = tracker.update([{ side: 'Left', landmarks: hand(0.08) }])
+    const [h] = tracker.update([{ side: 'Left', landmarks: hand(0.08) }])
     expect(h.pinched).toBe(true)
   })
 
   it('does not start a pinch in the hover band', () => {
     const tracker = createPinchTracker()
-    const { hands: [h] } = tracker.update([{ side: 'Left', landmarks: hand(0.08) }])
+    const [h] = tracker.update([{ side: 'Left', landmarks: hand(0.08) }])
     expect(h.pinched).toBe(false)
   })
 
   it('keeps each hand state separate', () => {
     const tracker = createPinchTracker()
     tracker.update([{ side: 'Left', landmarks: hand(0.02) }])
-    const { hands: [, right] } = tracker.update([
+    const [, right] = tracker.update([
       { side: 'Left', landmarks: hand(0.08) },
       { side: 'Right', landmarks: hand(0.08) },
     ])
@@ -58,21 +58,7 @@ describe('createPinchTracker', () => {
     const tracker = createPinchTracker()
     tracker.update([{ side: 'Left', landmarks: hand(0.02) }])
     tracker.update([])
-    const { hands: [h] } = tracker.update([{ side: 'Left', landmarks: hand(0.08) }])
+    const [h] = tracker.update([{ side: 'Left', landmarks: hand(0.08) }])
     expect(h.pinched).toBe(false)
-  })
-
-  it('gives the line only when two hands are pinched', () => {
-    const tracker = createPinchTracker()
-    expect(tracker.update([{ side: 'Left', landmarks: hand(0.02, 0.2) }]).line).toBeNull()
-
-    const result = tracker.update([
-      { side: 'Left', landmarks: hand(0.02, 0.2) },
-      { side: 'Right', landmarks: hand(0.02, 0.8) },
-    ])
-    expect(result.line).toEqual([
-      { x: 0.2, y: 0.5 },
-      { x: 0.8, y: 0.5 },
-    ])
   })
 })
